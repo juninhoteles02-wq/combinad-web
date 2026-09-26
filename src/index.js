@@ -77,10 +77,11 @@ async function handleClientMessage(client, from, text) {
   const convo = getClientConvo(from);
   convo.history.push({ role: "user", content: text });
 
-  const upcoming = await gcal.listUpcomingForPhone(client.calendarId, from);
+    const upcoming = await gcal.listUpcomingForPhone(client.calendarId, from);
   const agendaTexto = upcoming
     .map((e) => `${e.id}: ${e.servico} com ${e.barbeiro}, ${sched.WEEK[sched.fromIso(e.raw.start.dateTime.slice(0, 10)).getDay()]} ${sched.br(e.raw.start.dateTime.slice(0, 10))} às ${e.hora} (${e.situacao})`)
     .join("; ");
+  const nomeSalvo = upcoming[0]?.cliente || (await gcal.nomeConhecido(client.calendarId, from));
 
   const ctx = {
     lastReminderEventId: convo.lastReminderEventId,
@@ -91,7 +92,7 @@ async function handleClientMessage(client, from, text) {
     },
   };
   const tools = buildTools(client, from, ctx);
-  const systemPrompt = clientRules(client, from, agendaTexto, convo.lastReminderEventId);
+  const systemPrompt = clientRules(client, from, agendaTexto, convo.lastReminderEventId, nomeSalvo);
 
   const { text: reply, messages } = await ai.runConversation({
     systemPrompt,
