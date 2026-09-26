@@ -1,4 +1,4 @@
-const express = require("express");
+  const express = require("express");
 const { env, getClientByPhoneNumberId } = require("./config");
 const wa = require("./whatsapp");
 const gcal = require("./googleCalendar");
@@ -58,6 +58,14 @@ app.post("/webhook", async (req, res) => {
       const client = getClientByPhoneNumberId(msg.phoneNumberId);
       if (!client) {
         console.warn("Mensagem recebida para phone_number_id sem cliente configurado:", msg.phoneNumberId);
+        continue;
+      }
+      if (msg.unsupported) {
+        wa.sendText(
+          client.phoneNumberId,
+          msg.from,
+          `Só leio mensagem de texto por aqui, não consigo abrir isso (${msg.unsupported}). Pode me escrever, por favor? 💈`
+        ).catch((err) => console.error("Erro ao responder mensagem não suportada:", err));
         continue;
       }
       handleMessage(client, msg.from, msg.text).catch((err) => console.error("Erro ao processar mensagem:", err));
