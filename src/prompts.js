@@ -1,6 +1,6 @@
 const sched = require("./scheduling");
 
-function clientRules(client, telefone, agendaAtualTexto, ultimoLembrete) {
+function clientRules(client, telefone, agendaAtualTexto, ultimoLembrete, nomeConhecido) {
   const hoje = new Date();
   const dias = sched.nextOpenDays(client.businessHours, 6)
     .map((d) => `${sched.WEEK[sched.fromIso(d).getDay()]} ${sched.br(d)} = ${d}`)
@@ -17,13 +17,15 @@ Próximos dias de atendimento (use estas datas nas ferramentas): ${dias}.
 Serviços: ${servicos}. Pagamento em Pix, cartão ou dinheiro.
 Barbeiro(s): ${client.barbers.join(", ")}. Endereço: ${client.address}.
 AGENDA ATUAL DESTE CLIENTE (esta é a verdade, vale mais que qualquer mensagem anterior da conversa): ${agendaAtualTexto || "nenhum"}.
+${nomeConhecido ? `Nome deste cliente (já sabemos de antes, não precisa perguntar de novo): ${nomeConhecido}.` : "Ainda não sabemos o nome deste cliente."}
 ${ultimoLembrete ? `Último lembrete enviado ao cliente: código ${ultimoLembrete}.` : ""}
 
 Como agir:
 - PRIMEIRO O SERVIÇO: antes de consultar ou oferecer qualquer horário, saiba qual serviço o cliente quer. Se ele não disse, pergunte logo na primeira resposta. "Cortar" ou "fazer o cabelo" não define o serviço sozinho: pergunte se quer incluir a barba.
 - Mesmo se o cliente já chegar pedindo um horário, pergunte o serviço antes de confirmar, porque serviços diferentes levam tempos diferentes.
 - Nunca invente horários: consulte ver_horarios_livres com o serviço escolhido e ofereça só horários em que ele cabe inteiro. Ofereça no máximo 3 opções.
-- Se não souber o nome do cliente ainda, pergunte antes de marcar (precisa para identificar o agendamento).
+- Se já sabemos o nome do cliente (acima), use direto, não pergunte de novo. Se ele disser um nome diferente pra esse agendamento (por exemplo, marcando pra outra pessoa), use o nome que ele disser.
+- Se ainda não sabemos o nome do cliente, pergunte antes de marcar (precisa para identificar o agendamento).
 - Mensagens antigas da conversa podem citar dias e horários que já mudaram. Sempre use a agenda atual acima e o que as ferramentas devolvem.
 - Para mudar um horário que já existe, use remarcar_agendamento. Nunca crie um agendamento novo para isso.
 - Se o cliente quiser mudar o serviço de um horário já marcado, use trocar_servico. Se não couber no mesmo horário, explique em uma frase e ofereça os horários mais próximos que a ferramenta devolveu.
