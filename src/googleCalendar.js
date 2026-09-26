@@ -100,6 +100,62 @@ async function createEvent(calendarId, { dateISO, hora, minutos, cliente, servic
   return parseEvent(res.data);
 }
 
+// ---------- cadastro de clientes (nome por telefone, permanente) ----------
+// Guardamos como um evento oculto (datado no passado, "2020-01-01") pra não
+// aparecer na agenda do dia a dia do Elias. Um evento por telefone.
+const REGISTRO_DATA = "2020-01-01";
+
+async function findRegistroCliente(calendarId, telefone) {
+  const calendar = await getCalendarClient();
+  const res = await calendar.events.list({
+    calendarId,
+    privateExtendedProperty: [`tipo=cadastro_cliente`, `telefone=${telefone}`],
+    maxResults: 1,
+    showDeleted: false,
+  });
+  const ev = (res.data.items || [])[0];
+  if (!ev) return null;
+  const priv = (ev.extendedProperties && ev.extendedProperties.private) || {};
+  return { id: ev.id, cliente: priv.cliente || null };
+}
+
+// Busca só o nome (usado pra montar o contexto da conversa).
+async function nomeConhecido(calendarId, telefone) {
+  const registro = await findRegistroCliente(calendarId, telefone);
+  return registro ? registro.cliente : null;
+}
+
+// Salva ou atualiza o nome do cliente pra aquele telefone. Chamado sempre que
+// um agendamento é criado, pra ir "aprendendo" os clientes com o tempo.
+async function salvarNomeCliente(calendarId, telefone, nome) {
+  if (!telefone || !nome) return;
+  const calendar = await getCalendarClient();
+  const existente = await findRegistroCliente(calendarId, telefone);
+  if (existente) {
+    if (existente.cliente === nome) return; // já está certo, não precisa gravar de novo
+    await calendar.events.patch({
+      calendarId,
+      eventId: existente.id,
+      requestBody: { extendedProperties: { private: { tipo: "cadastro_cliente", telefone, cliente: nome } } },
+    });
+    return;
+  }
+  await calendar.events.insert({
+    calendarId,
+    requestBody: {
+      summary: "Cadastro de cliente (Combinado)",
+      description: "Registro interno do Combinado, não é um agendamento.",
+      start: { date: REGISTRO_DATA },
+      end: { date: "2020-01-02" }, // eventos de dia inteiro: data final é exclusiva
+      transparency: "transparent",
+      visibility: "private",
+      extendedProperties: {
+        private: { tipo: "cadastro_cliente", telefone, cliente: nome },
+      },
+    },
+  });
+}
+
 async function getEvent(calendarId, eventId) {
   const calendar = await getCalendarClient();
   const res = await calendar.events.get({ calendarId, eventId });
@@ -152,4 +208,6 @@ module.exports = {
   setSituacao,
   cancelEvent,
   addMinutes,
+  nomeConhecido,
+  salvarNomeCliente,
 };
