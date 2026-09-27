@@ -3,18 +3,18 @@ const { env, getClientByPhoneNumberId } = require("./config");
 const wa = require("./whatsapp");
 const gcal = require("./googleCalendar");
 const sched = require("./scheduling");
-const { buildTools, describe } = require("./ferramentas");
+const { buildTools, describe } = require("./tools");
 const { buildOwnerTools } = require("./ownerTools");
 const { clientRules, ownerRules } = require("./prompts");
 const ownerSession = require("./ownerSession");
 const ai = require("./ai");
-require("./lembretes"); // agenda o lembrete da véspera (node-cron)
+require("./reminders"); // agenda o lembrete da véspera (node-cron)
 
 const app = express();
 app.use(express.json());
 
 // ---------- estado em memória (por conversa) ----------
-const { getClientConvo } = require("./estado");
+const { getClientConvo } = require("./state");
 const ownerConversations = new Map(); // phone -> { history }
 const ownerPending = new Map(); // phone -> { awaitingCode: bool, pendingText: string|null }
 const seenMessageIds = [];
