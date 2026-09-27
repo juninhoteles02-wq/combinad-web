@@ -83,7 +83,7 @@ function buildTools(client, telefone, ctx) {
         const livres = {};
         for (const b of barbeiros) {
           livres[b] = sched.timesOfDay(client.businessHours).filter((t) =>
-            sched.canFit(dateISO, b, t, minutos, client.businessHours, events, null)
+            sched.canFit(dateISO, b, t, minutos, client.businessHours, events, null, client.services)
           );
         }
         return { dia: `${sched.WEEK[sched.fromIso(dateISO).getDay()]} ${sched.br(dateISO)}`, servico, livres };
@@ -110,8 +110,8 @@ function buildTools(client, telefone, ctx) {
         const hora = String(args.hora).slice(0, 5);
         const events = await gcal.listEventsForDay(client.calendarId, dateISO);
         const escolhido = normBarbeiro(client, args.barbeiro) ||
-          client.barbers.find((b) => sched.canFit(dateISO, b, hora, minutos, client.businessHours, events, null));
-        if (!escolhido || !sched.canFit(dateISO, escolhido, hora, minutos, client.businessHours, events, null)) {
+          client.barbers.find((b) => sched.canFit(dateISO, b, hora, minutos, client.businessHours, events, null, client.services));
+        if (!escolhido || !sched.canFit(dateISO, escolhido, hora, minutos, client.businessHours, events, null, client.services)) {
           throw new Error("Esse horário não está livre. Consulte os horários livres de novo.");
         }
         const ev = await gcal.createEvent(client.calendarId, {
@@ -156,9 +156,9 @@ function buildTools(client, telefone, ctx) {
         const minutos = client.services[atual.servico].min;
         const events = await gcal.listEventsForDay(client.calendarId, dateISO);
         const escolhido = normBarbeiro(client, args.barbeiro) ||
-          (sched.canFit(dateISO, atual.barbeiro, hora, minutos, client.businessHours, events, atual.id) ? atual.barbeiro
-            : client.barbers.find((b) => sched.canFit(dateISO, b, hora, minutos, client.businessHours, events, atual.id)));
-        if (!escolhido || !sched.canFit(dateISO, escolhido, hora, minutos, client.businessHours, events, atual.id)) {
+          (sched.canFit(dateISO, atual.barbeiro, hora, minutos, client.businessHours, events, atual.id, client.services) ? atual.barbeiro
+            : client.barbers.find((b) => sched.canFit(dateISO, b, hora, minutos, client.businessHours, events, atual.id, client.services)));
+        if (!escolhido || !sched.canFit(dateISO, escolhido, hora, minutos, client.businessHours, events, atual.id, client.services)) {
           throw new Error("Esse horário não está livre.");
         }
         const ev = await gcal.moveEvent(client.calendarId, atual.id, { dateISO, hora, minutos, barbeiro: escolhido });
@@ -182,7 +182,7 @@ function buildTools(client, telefone, ctx) {
         const minutos = client.services[servico].min;
         const dateISO = atual.raw.start.dateTime.slice(0, 10);
         const events = await gcal.listEventsForDay(client.calendarId, dateISO);
-        if (sched.canFit(dateISO, atual.barbeiro, atual.hora, minutos, client.businessHours, events, atual.id)) {
+        if (sched.canFit(dateISO, atual.barbeiro, atual.hora, minutos, client.businessHours, events, atual.id, client.services)) {
           const ev = await gcal.patchEvent(client.calendarId, atual.id, {
             summary: `${atual.cliente} - ${servico}`,
             extendedProperties: { private: { servico } },
@@ -191,7 +191,7 @@ function buildTools(client, telefone, ctx) {
         }
         const i = sched.timesOfDay(client.businessHours).indexOf(atual.hora);
         const proximos = sched.timesOfDay(client.businessHours)
-          .filter((t) => sched.canFit(dateISO, atual.barbeiro, t, minutos, client.businessHours, events, atual.id))
+          .filter((t) => sched.canFit(dateISO, atual.barbeiro, t, minutos, client.businessHours, events, atual.id, client.services))
           .sort((a, b) => Math.abs(sched.timesOfDay(client.businessHours).indexOf(a) - i) - Math.abs(sched.timesOfDay(client.businessHours).indexOf(b) - i))
           .slice(0, 3)
           .sort();
