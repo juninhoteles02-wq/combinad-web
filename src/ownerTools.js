@@ -3,16 +3,25 @@
 
 const gcal = require("./googleCalendar");
 const sched = require("./scheduling");
-const store = require("./store");
-
-function closingPath(client, dateISO) {
-  return `closings/${client.id}/${dateISO}.json`;
-}
 
 function buildOwnerTools(client) {
   const today = sched.isoToday();
 
   return [
+    {
+      name: "ver_agenda_do_dia",
+      description: "Mostra a agenda de hoje (hora, cliente, serviço, status) só pra consulta — não é o fechamento do dia, não fala de faturamento e não pergunta sobre faltas ou encaixes.",
+      parameters: { type: "object", properties: {} },
+      async execute() {
+        const events = await gcal.listEventsForDay(client.calendarId, today);
+        const ativos = events.filter((e) => e.situacao !== "cancelado").sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
+        return {
+          dia: `${sched.WEEK[sched.fromIso(today).getDay()]} ${sched.br(today)}`,
+          quantidade: ativos.length,
+          agendamentos: ativos.map((e) => ({ hora: e.hora, cliente: e.cliente, servico: e.servico, status: e.situacao })),
+        };
+      },
+    },
     {
       name: "resumo_do_dia",
       description: "Mostra os agendamentos de hoje (cliente, hora, serviço, valor, status) e o valor previsto se todos vierem.",
@@ -30,6 +39,53 @@ function buildOwnerTools(client) {
           })),
           quantidade: ativos.length,
           previsto,
+        };
+      },
+    },
+    {
+      name: "resumo_do_periodo",
+      description: "Soma o faturamento da semana atual (desde segunda-feira) ou do mês atual (desde o dia 1), até hoje. Usa os fechamentos que o dono já fez dia a dia; dias que ele ainda não fechou entram como estimativa (baseada nos agendamentos, supondo que todos vieram), nunca como valor confirmado.",
+      parameters: {
+        type: "object",
+        properties: { periodo: { type: "string", enum: ["semana", "mes"] } },
+        required: ["periodo"],
+      },
+      async execute(args) {
+        const inicio = args.periodo === "mes" ? sched.startOfMonth(today) : sched.startOfWeek(today);
+        const dias = sched.daysBetween(inicio, today);
+
+        let confirmado = 0;
+        let atendidosConfirmados = 0;
+        let diasFechados = 0;
+        const diasNaoFechados = [];
+        let estimadoNaoFechado = 0;
+
+        for (const dia of dias) {
+          const fechamento = await gcal.buscarFechamentoDia(client.calendarId, dia);
+          if (fechamento) {
+            confirmado += fechamento.real;
+            atendidosConfirmados += fechamento.atendidos;
+            diasFechados++;
+            continue;
+          }
+          if (!sched.isOpenDay(dia, client.businessHours)) continue;
+          const events = await gcal.listEventsForDay(client.calendarId, dia);
+          const ativos = events.filter((e) => e.situacao !== "cancelado");
+          if (ativos.length === 0) continue;
+          estimadoNaoFechado += ativos.reduce((t, e) => t + (client.services[e.servico]?.price || 0), 0);
+          diasNaoFechados.push(dia);
+        }
+
+        return {
+          periodo: args.periodo,
+          de: inicio,
+          ate: today,
+          faturamento_confirmado: confirmado,
+          atendidos_confirmados: atendidosConfirmados,
+          dias_fechados: diasFechados,
+          dias_ainda_nao_fechados: diasNaoFechados,
+          faturamento_estimado_dias_nao_fechados: estimadoNaoFechado,
+          faturamento_total_projetado: confirmado + estimadoNaoFechado,
         };
       },
     },
@@ -95,7 +151,7 @@ function buildOwnerTools(client) {
           data: today, previsto, faltas: faltaram.map((e) => `${e.cliente} (${e.hora}, ${e.servico})`),
           perdido, encaixes, extra, real, atendidos,
         };
-        store.writeJSON(closingPath(client, today), fechamento);
+        await gcal.salvarFechamentoDia(client.calendarId, today, fechamento);
 
         return {
           ok: true, previsto, faltas: fechamento.faltas, valor_perdido_com_faltas: perdido,
