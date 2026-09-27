@@ -53,6 +53,15 @@ function buildTools(client, telefone, ctx) {
   // respondido (confirmar_presenca sem código) e para acionar alertas ao dono.
   return [
     {
+      name: "mostrar_opcoes_servico",
+      description: "Envia ao cliente os serviços disponíveis como botões, pra ele escolher tocando em vez de digitar. Use isso quando ainda não souber qual serviço o cliente quer, em vez de perguntar por texto. Depois de chamar esta ferramenta, não escreva mais nada: deixe a resposta final vazia, porque a pergunta já foi enviada nos botões.",
+      parameters: { type: "object", properties: {} },
+      async execute() {
+        if (ctx.enviarOpcoesServico) await ctx.enviarOpcoesServico();
+        return { ok: true, aviso: "Botões enviados ao cliente. Não repita a pergunta em texto; responda vazio." };
+      },
+    },
+    {
       name: "ver_horarios_livres",
       description: "Lista os horários em que o serviço escolhido cabe inteiro. Só use depois que o cliente disse qual serviço quer.",
       parameters: {
@@ -110,6 +119,11 @@ function buildTools(client, telefone, ctx) {
           cliente: args.nome_cliente || "Cliente",
           servico, barbeiro: escolhido, telefone, origem: "assistente",
         });
+        if (args.nome_cliente) {
+          gcal.salvarNomeCliente(client.calendarId, telefone, args.nome_cliente).catch((err) =>
+            console.error("Erro ao salvar cadastro de cliente:", err)
+          );
+        }
         return { ok: true, ...describe(ev) };
       },
     },
