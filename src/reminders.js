@@ -15,7 +15,7 @@ const { CLIENTS } = require("./config");
 const gcal = require("./googleCalendar");
 const sched = require("./scheduling");
 const wa = require("./whatsapp");
-const { getClientConvo } = require("./state");
+const { getClientConvo } = require("./estado");
 
 function tomorrowISO() {
   const hoje = sched.fromIso(sched.isoToday());
