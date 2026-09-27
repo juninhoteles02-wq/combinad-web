@@ -61,10 +61,11 @@ app.post("/webhook", async (req, res) => {
         continue;
       }
       if (msg.unsupported) {
+        const marca = (client.emoji && client.emoji.marca) || "💈";
         wa.sendText(
           client.phoneNumberId,
           msg.from,
-          `Só leio mensagem de texto por aqui, não consigo abrir isso (${msg.unsupported}). Pode me escrever, por favor? 💈`
+          `Só leio mensagem de texto por aqui, não consigo abrir isso (${msg.unsupported}). Pode me escrever, por favor? ${marca}`
         ).catch((err) => console.error("Erro ao responder mensagem não suportada:", err));
         continue;
       }
@@ -100,11 +101,12 @@ async function handleClientMessage(client, from, text) {
       }
     },
     enviarOpcoesServico: async () => {
+      const marca = (client.emoji && client.emoji.marca) || "💈";
       const linhas = Object.entries(client.services).map(([nome, s]) => `${nome} - R$ ${s.price}`).join("\n");
       await wa.sendButtons(
         client.phoneNumberId,
         from,
-        `Qual serviço você quer? 💈\n\n${linhas}`,
+        `Qual serviço você quer? ${marca}\n\n${linhas}`,
         Object.keys(client.services).map((nome) => ({ id: nome, title: nome }))
       );
       botoesEnviados = true;
