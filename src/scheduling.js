@@ -102,11 +102,16 @@ function timesOfDayFromHora(horaInicio, quantidadeSlots) {
   return out;
 }
 
-function canFit(dateISO, barbeiro, timeHM, minutos, hours, events, ignoreId, tz) {
+function canFit(dateISO, barbeiro, timeHM, minutos, hours, events, ignoreId, services, tz) {
   const n = Math.round(minutos / 30);
   const times = timesOfDayFromHora(timeHM, n);
   const dayTimes = new Set(timesOfDay(hours));
-  const occ = occupiedSlots(events, barbeiro, ignoreId, () => minutos);
+  // Cada agendamento já existente ocupa os slots da SUA PRÓPRIA duração
+  // (ex.: Corte + Barba = 60 min), não a duração do serviço que está sendo
+  // verificado agora. Por isso precisamos do mapa de serviços aqui.
+  const occ = occupiedSlots(events, barbeiro, ignoreId, (servico) =>
+    (services && services[servico] ? services[servico].min : minutos)
+  );
   for (const t of times) {
     if (!dayTimes.has(t)) return false;
     if (occ.has(t)) return false;
