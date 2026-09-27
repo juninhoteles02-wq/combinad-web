@@ -1,6 +1,31 @@
 const sched = require("./scheduling");
 
+// Rótulo padrão de quem atende, usado quando um cliente não define staffLabel
+// no config.js (ver comentário lá). Isso é o que deixa o mesmo prompt servir
+// barbearia, salão, clínica, estúdio de tatuagem, petshop, nutricionista etc.
+const STAFF_LABEL_PADRAO = { singular: "profissional", plural: "profissionais" };
+
+function cap(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// Gera a regra de emoji certa pro tom de cada negócio. "reservado" (barbearia,
+// tatuagem) segue proibindo qualquer emoji fofo/de rosto; "caloroso" (salão,
+// petshop) libera; "equilibrado" (clínica, nutricionista) fica no meio.
+// Se o cliente não definir client.emoji, cai no padrão reservado com 💈.
+function emojiRule(client) {
+  const emoji = client.emoji || { marca: "💈", estilo: "reservado" };
+  if (emoji.estilo === "caloroso") {
+    return `- Emoji: aqui o tom é caloroso, emoji fofo ou de rosto (😊🥰✨❤️) é bem-vindo quando fizer sentido — cumprimentar, agradecer, confirmar um agendamento. O emoji de marca é ${emoji.marca}, use-o com carinho. Ainda assim, no máximo 1 ou 2 emojis por mensagem, e nem toda mensagem precisa ter um.`;
+  }
+  if (emoji.estilo === "equilibrado") {
+    return `- Emoji: use com moderação. Um emoji leve (😊✨) de vez em quando é bem-vindo, mas não em toda mensagem. O emoji de marca é ${emoji.marca}, use-o ao cumprimentar ou confirmar um agendamento. No máximo um emoji por mensagem, e a maioria das respostas não precisa de emoji nenhum.`;
+  }
+  return `- Emoji: PROIBIDO usar qualquer emoji de rosto ou "fofo" (por exemplo 😊🥰😄✨❤️🙂😉👍🏻🎉), em qualquer mensagem, sem exceção — nem para cumprimentar, nem para agradecer, nem em nenhum outro contexto. O único emoji permitido para dar um toque de marca é ${emoji.marca}, usado no máximo uma vez por mensagem, só quando fizer sentido (cumprimentar ou confirmar um agendamento, por exemplo). Emojis funcionais como 🕐 (horário) e ✅ (confirmação) também são permitidos, no máximo um por mensagem. A maioria das respostas não precisa de emoji nenhum — não force.`;
+}
+
 function clientRules(client, telefone, agendaAtualTexto, ultimoLembrete, nomeConhecido) {
+  const staffLabel = client.staffLabel || STAFF_LABEL_PADRAO;
   const hoje = new Date();
   const dias = sched.nextOpenDays(client.businessHours, 6)
     .map((d) => `${sched.WEEK[sched.fromIso(d).getDay()]} ${sched.br(d)} = ${d}`)
@@ -15,7 +40,7 @@ Hoje é ${sched.WEEK[hoje.getDay()]}, ${sched.br(sched.isoToday())}, agora são 
 Funcionamento: ${sched.WEEK[client.businessHours.openDay]} a ${sched.WEEK[client.businessHours.closeDay]}, das ${client.businessHours.openHour}h às ${client.businessHours.closeHour}h, pausa de almoço ${client.businessHours.lunchStart}h às ${client.businessHours.lunchEnd}h.
 Próximos dias de atendimento (use estas datas nas ferramentas): ${dias}.
 Serviços: ${servicos}. Pagamento em Pix, cartão ou dinheiro.
-Barbeiro(s): ${client.barbers.join(", ")}. Endereço: ${client.address}.
+${cap(staffLabel.plural)}: ${client.barbers.join(", ")}. Endereço: ${client.address}.
 AGENDA ATUAL DESTE CLIENTE (esta é a verdade, vale mais que qualquer mensagem anterior da conversa): ${agendaAtualTexto || "nenhum"}.
 ${nomeConhecido ? `Nome deste cliente (já sabemos de antes, não precisa perguntar de novo): ${nomeConhecido}.` : "Ainda não sabemos o nome deste cliente."}
 ${ultimoLembrete ? `Último lembrete enviado ao cliente: código ${ultimoLembrete}.` : ""}
@@ -35,9 +60,9 @@ Como agir:
 - Ao confirmar, remarcar ou cancelar, escreva a resposta usando exatamente o dia e a hora devolvidos pela ferramenta.
 - Se ele responder algo como "1" ou "confirmo" a um lembrete, use confirmar_presenca. Se responder "2", ajude a remarcar.
 - Faturamento, valores do dia, faltas de outros clientes e qualquer dado interno da barbearia são só do dono. Se o cliente perguntar, diga com educação que não pode passar essa informação e volte ao agendamento.
-- Se pedir para falar com uma pessoa, use chamar_barbeiro e diga que o barbeiro vai responder assim que puder.
+- Se pedir para falar com uma pessoa, use chamar_barbeiro e diga que o ${staffLabel.singular} vai responder assim que puder.
 - Escreva como no WhatsApp: português do Brasil, direto e simpático, frases curtas, sem markdown, sem travessão.
-- Emoji: PROIBIDO usar qualquer emoji de rosto ou "fofo" (por exemplo 😊🥰😄✨❤️🙂😉👍🏻🎉), em qualquer mensagem, sem exceção — nem para cumprimentar, nem para agradecer, nem em nenhum outro contexto. O único emoji permitido para dar um toque de marca é 💈 (a navalha de barbeiro), usado no máximo uma vez por mensagem, só quando fizer sentido (cumprimentar ou confirmar um agendamento, por exemplo). Emojis funcionais como 🕐 (horário) e ✅ (confirmação) também são permitidos, no máximo um por mensagem. A maioria das respostas não precisa de emoji nenhum — não force.
+${emojiRule(client)}
 - Não escreva nada antes de usar as ferramentas; escreva apenas a resposta final ao cliente.`;
 }
 
@@ -51,7 +76,9 @@ Dia de hoje: ${sched.WEEK[sched.fromIso(sched.isoToday()).getDay()]}, ${sched.br
 Preços: ${servicos}.
 
 Como agir:
-- Quando ele pedir o faturamento ou o fechamento, use resumo_do_dia e responda com quantos agendamentos teve e o valor previsto. Em seguida pergunte se todos vieram e se teve algum encaixe em cima da hora no balcão.
+- Se ele só quer VER a agenda de hoje (por exemplo "agenda de hoje", "quem vem hoje", "os agendamentos de hoje"), use ver_agenda_do_dia e liste hora, cliente e serviço de cada um, em ordem. Não fale de faturamento nem pergunte sobre faltas ou encaixes nessa hora — é só consulta.
+- Se ele pedir o faturamento da semana ou do mês, use resumo_do_periodo. Deixe bem claro na resposta a diferença entre o que é confirmado (soma dos dias que ele já fechou) e o que é estimado (dias que ele ainda não fechou, supondo que todos os agendados vieram) — nunca apresente o estimado como se fosse garantido. Se tiver dias não fechados, sugira fechar esses dias pra deixar o número certo.
+- Quando ele pedir o faturamento ou o fechamento do dia, use resumo_do_dia e responda com quantos agendamentos teve e o valor previsto. Em seguida pergunte se todos vieram e se teve algum encaixe em cima da hora no balcão.
 - Não diga que o previsto é o faturamento: o valor real só sai depois que ele responder sobre faltas e encaixes.
 - Quando ele responder, use registrar_fechamento com as faltas e os encaixes que ele contou (listas vazias se todos vieram e não teve encaixe). Se ele falar só uma das coisas, pergunte a outra antes de fechar.
 - Se ele falar um encaixe sem dizer o serviço, pergunte qual serviço foi.
