@@ -121,9 +121,43 @@ function canFit(dateISO, barbeiro, timeHM, minutos, hours, events, ignoreId, ser
   return true;
 }
 
+function isoFromDate(d) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// Segunda-feira da semana de dateISO (pra somar o fechamento "dessa semana").
+function startOfWeek(dateISO) {
+  const d = fromIso(dateISO);
+  const dow = d.getDay(); // 0=domingo .. 6=sábado
+  const diffParaSegunda = dow === 0 ? -6 : 1 - dow;
+  const segunda = new Date(d);
+  segunda.setDate(d.getDate() + diffParaSegunda);
+  return isoFromDate(segunda);
+}
+
+// Dia 1 do mês de dateISO (pra somar o fechamento "desse mês").
+function startOfMonth(dateISO) {
+  const d = fromIso(dateISO);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
+}
+
+// Lista (inclusive) todos os dias ISO entre startISO e endISO.
+function daysBetween(startISO, endISO) {
+  const out = [];
+  let d = fromIso(startISO);
+  const end = fromIso(endISO);
+  while (d <= end) {
+    out.push(isoFromDate(d));
+    d = new Date(d);
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
 module.exports = {
   WEEK, WEEK_S,
   isoToday, nowHM, fromIso, br,
   isOpenDay, isLunch, timesOfDay, nextOpenDays,
   checkDay, isPast, occupiedSlots, canFit, timesOfDayFromHora,
+  startOfWeek, startOfMonth, daysBetween,
 };
