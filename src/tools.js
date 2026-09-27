@@ -227,7 +227,7 @@ function buildTools(client, telefone, ctx) {
     },
     {
       name: "chamar_barbeiro",
-      description: "Avisa o barbeiro quando o cliente pede para falar com uma pessoa ou traz algo que o assistente não resolve.",
+      description: `Avisa o ${(client.staffLabel || { singular: "profissional" }).singular} quando o cliente pede para falar com uma pessoa ou traz algo que o assistente não resolve.`,
       parameters: { type: "object", properties: { motivo: { type: "string" } }, required: ["motivo"] },
       async execute(args) {
         if (ctx.onCallBarber) await ctx.onCallBarber(String(args.motivo || "").slice(0, 200));
