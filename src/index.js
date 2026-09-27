@@ -1,20 +1,20 @@
-  const express = require("express");
+const express = require("express");
 const { env, getClientByPhoneNumberId } = require("./config");
 const wa = require("./whatsapp");
 const gcal = require("./googleCalendar");
 const sched = require("./scheduling");
-const { buildTools, describe } = require("./tools");
+const { buildTools, describe } = require("./ferramentas");
 const { buildOwnerTools } = require("./ownerTools");
 const { clientRules, ownerRules } = require("./prompts");
 const ownerSession = require("./ownerSession");
 const ai = require("./ai");
-require("./reminders"); // agenda o lembrete da véspera (node-cron)
+require("./lembretes"); // agenda o lembrete da véspera (node-cron)
 
 const app = express();
 app.use(express.json());
 
 // ---------- estado em memória (por conversa) ----------
-const { getClientConvo } = require("./state");
+const { getClientConvo } = require("./estado");
 const ownerConversations = new Map(); // phone -> { history }
 const ownerPending = new Map(); // phone -> { awaitingCode: bool, pendingText: string|null }
 const seenMessageIds = [];
@@ -85,18 +85,29 @@ async function handleClientMessage(client, from, text) {
   const convo = getClientConvo(from);
   convo.history.push({ role: "user", content: text });
 
-    const upcoming = await gcal.listUpcomingForPhone(client.calendarId, from);
+  const upcoming = await gcal.listUpcomingForPhone(client.calendarId, from);
   const agendaTexto = upcoming
     .map((e) => `${e.id}: ${e.servico} com ${e.barbeiro}, ${sched.WEEK[sched.fromIso(e.raw.start.dateTime.slice(0, 10)).getDay()]} ${sched.br(e.raw.start.dateTime.slice(0, 10))} às ${e.hora} (${e.situacao})`)
     .join("; ");
   const nomeSalvo = upcoming[0]?.cliente || (await gcal.nomeConhecido(client.calendarId, from));
 
+  let botoesEnviados = false;
   const ctx = {
     lastReminderEventId: convo.lastReminderEventId,
     onCallBarber: async (motivo) => {
       if (client.owner.phone) {
         await wa.sendText(client.phoneNumberId, client.owner.phone, `🔔 Um cliente pediu atendimento pelo Combinado.\nMotivo: ${motivo}`);
       }
+    },
+    enviarOpcoesServico: async () => {
+      const linhas = Object.entries(client.services).map(([nome, s]) => `${nome} - R$ ${s.price}`).join("\n");
+      await wa.sendButtons(
+        client.phoneNumberId,
+        from,
+        `Qual serviço você quer? 💈\n\n${linhas}`,
+        Object.keys(client.services).map((nome) => ({ id: nome, title: nome }))
+      );
+      botoesEnviados = true;
     },
   };
   const tools = buildTools(client, from, ctx);
@@ -109,9 +120,18 @@ async function handleClientMessage(client, from, text) {
   });
 
   convo.history = trimHistory(messages);
-  const finalText = reply || "Desculpa, pode repetir?";
-  convo.history.push({ role: "assistant", content: finalText });
-  await wa.sendText(client.phoneNumberId, from, finalText);
+  const finalText = (reply || "").trim();
+  convo.history.push({ role: "assistant", content: finalText || "(opções de serviço enviadas por botões)" });
+  if (finalText) {
+    // A IA escreveu algo: manda normal (cobre também o caso raro de ela
+    // escrever algo mesmo depois de mandar os botões).
+    await wa.sendText(client.phoneNumberId, from, finalText);
+  } else if (!botoesEnviados) {
+    // Resposta vazia e nenhum botão foi enviado neste turno: usa o fallback.
+    await wa.sendText(client.phoneNumberId, from, "Desculpa, pode repetir?");
+  }
+  // Se botoesEnviados e finalText vazio: os botões já carregam a pergunta,
+  // não manda nada a mais.
 }
 
 async function handleOwnerMessage(client, from, text) {
