@@ -156,6 +156,82 @@ async function salvarNomeCliente(calendarId, telefone, nome) {
   });
 }
 
+// ---------- fechamento do dia (permanente, no Google Calendar) ----------
+// Guardado como um evento oculto de dia inteiro, datado no próprio dia do
+// fechamento (ex.: 2026-09-26), pra facilitar somar por semana/mês depois.
+// Isso substitui o antigo store.writeJSON local (disco do Render free não é
+// permanente — some a cada reinício do servidor).
+
+async function findFechamentoDia(calendarId, dateISO) {
+  const calendar = await getCalendarClient();
+  const res = await calendar.events.list({
+    calendarId,
+    privateExtendedProperty: [`tipo=fechamento_dia`, `data=${dateISO}`],
+    maxResults: 1,
+    showDeleted: false,
+  });
+  return (res.data.items || [])[0] || null;
+}
+
+// Salva (ou substitui) o fechamento de um dia. "dados" vem de registrar_fechamento.
+async function salvarFechamentoDia(calendarId, dateISO, dados) {
+  const calendar = await getCalendarClient();
+  const priv = {
+    tipo: "fechamento_dia",
+    data: dateISO,
+    previsto: String(dados.previsto || 0),
+    real: String(dados.real || 0),
+    perdido: String(dados.perdido || 0),
+    extra: String(dados.extra || 0),
+    atendidos: String(dados.atendidos || 0),
+    // arrays viram texto simples pra caber em extendedProperties (só strings).
+    faltas: (dados.faltas || []).join("|").slice(0, 1000),
+    encaixes: (dados.encaixes || []).map((e) => `${e.servico}:${e.quantidade}`).join(",").slice(0, 1000),
+  };
+  const existente = await findFechamentoDia(calendarId, dateISO);
+  if (existente) {
+    await calendar.events.patch({ calendarId, eventId: existente.id, requestBody: { extendedProperties: { private: priv } } });
+    return;
+  }
+  const [y, m, d] = dateISO.split("-").map(Number);
+  const amanha = new Date(y, m - 1, d + 1);
+  const amanhaISO = `${amanha.getFullYear()}-${String(amanha.getMonth() + 1).padStart(2, "0")}-${String(amanha.getDate()).padStart(2, "0")}`;
+  await calendar.events.insert({
+    calendarId,
+    requestBody: {
+      summary: `Fechamento ${dateISO} (Combinado)`,
+      description: "Registro interno do Combinado, não é um agendamento.",
+      start: { date: dateISO },
+      end: { date: amanhaISO },
+      transparency: "transparent",
+      visibility: "private",
+      extendedProperties: { private: priv },
+    },
+  });
+}
+
+// Devolve o fechamento salvo daquele dia, ou null se o dono nunca fechou esse dia.
+async function buscarFechamentoDia(calendarId, dateISO) {
+  const ev = await findFechamentoDia(calendarId, dateISO);
+  if (!ev) return null;
+  const p = (ev.extendedProperties && ev.extendedProperties.private) || {};
+  return {
+    data: dateISO,
+    previsto: Number(p.previsto || 0),
+    real: Number(p.real || 0),
+    perdido: Number(p.perdido || 0),
+    extra: Number(p.extra || 0),
+    atendidos: Number(p.atendidos || 0),
+    faltas: p.faltas ? p.faltas.split("|").filter(Boolean) : [],
+    encaixes: p.encaixes
+      ? p.encaixes.split(",").filter(Boolean).map((s) => {
+          const [servico, quantidade] = s.split(":");
+          return { servico, quantidade: Number(quantidade || 0) };
+        })
+      : [],
+  };
+}
+
 async function getEvent(calendarId, eventId) {
   const calendar = await getCalendarClient();
   const res = await calendar.events.get({ calendarId, eventId });
@@ -210,4 +286,6 @@ module.exports = {
   addMinutes,
   nomeConhecido,
   salvarNomeCliente,
+  salvarFechamentoDia,
+  buscarFechamentoDia,
 };
