@@ -4,19 +4,37 @@
 const gcal = require("./googleCalendar");
 const sched = require("./scheduling");
 
+// Resolve qual dia a ferramenta deve usar: o que veio em args.data (validado),
+// ou hoje se o dono não especificou outro dia. Isso é o que faltava antes —
+// sem isso, toda pergunta sobre "sábado" ou "terça" caía sempre em hoje.
+function resolveDia(args, tz) {
+  const bruto = args && args.data ? String(args.data).trim() : "";
+  if (!bruto) return sched.isoToday(tz);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(bruto)) {
+    throw new Error("Data deve estar no formato AAAA-MM-DD.");
+  }
+  return bruto;
+}
+
 function buildOwnerTools(client) {
-  const today = sched.isoToday();
+  const DATA_PARAM = {
+    data: {
+      type: "string",
+      description: "Dia a consultar, no formato AAAA-MM-DD. Se o dono não citou outro dia, omita — o padrão é hoje. Se ele citou um dia da semana, uma data ou 'ontem'/'anteontem', calcule a data exata (AAAA-MM-DD) a partir de hoje e informe aqui — nunca assuma que é hoje quando ele citou outro dia.",
+    },
+  };
 
   return [
     {
       name: "ver_agenda_do_dia",
-      description: "Mostra a agenda de hoje (hora, cliente, serviço, status) só pra consulta — não é o fechamento do dia, não fala de faturamento e não pergunta sobre faltas ou encaixes.",
-      parameters: { type: "object", properties: {} },
-      async execute() {
-        const events = await gcal.listEventsForDay(client.calendarId, today);
+      description: "Mostra a agenda de um dia (hora, cliente, serviço, status) só pra consulta — não é o fechamento do dia, não fala de faturamento e não pergunta sobre faltas ou encaixes. Aceita um parâmetro de data opcional; sem ele, mostra hoje.",
+      parameters: { type: "object", properties: { ...DATA_PARAM } },
+      async execute(args) {
+        const dia = resolveDia(args);
+        const events = await gcal.listEventsForDay(client.calendarId, dia);
         const ativos = events.filter((e) => e.situacao !== "cancelado").sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
         return {
-          dia: `${sched.WEEK[sched.fromIso(today).getDay()]} ${sched.br(today)}`,
+          dia: `${sched.WEEK[sched.fromIso(dia).getDay()]} ${sched.br(dia)}`,
           quantidade: ativos.length,
           agendamentos: ativos.map((e) => ({ hora: e.hora, cliente: e.cliente, servico: e.servico, status: e.situacao })),
         };
@@ -24,14 +42,15 @@ function buildOwnerTools(client) {
     },
     {
       name: "resumo_do_dia",
-      description: "Mostra os agendamentos de hoje (cliente, hora, serviço, valor, status) e o valor previsto se todos vierem.",
-      parameters: { type: "object", properties: {} },
-      async execute() {
-        const events = await gcal.listEventsForDay(client.calendarId, today);
+      description: "Mostra os agendamentos de um dia (cliente, hora, serviço, valor, status) e o valor previsto se todos vierem. Aceita um parâmetro de data opcional; sem ele, mostra hoje.",
+      parameters: { type: "object", properties: { ...DATA_PARAM } },
+      async execute(args) {
+        const dia = resolveDia(args);
+        const events = await gcal.listEventsForDay(client.calendarId, dia);
         const ativos = events.filter((e) => e.situacao !== "cancelado");
         const previsto = ativos.reduce((t, e) => t + (client.services[e.servico]?.price || 0), 0);
         return {
-          dia: `${sched.WEEK[sched.fromIso(today).getDay()]} ${sched.br(today)}`,
+          dia: `${sched.WEEK[sched.fromIso(dia).getDay()]} ${sched.br(dia)}`,
           agendamentos: ativos.map((e) => ({
             cliente: e.cliente, hora: e.hora, servico: e.servico,
             valor: client.services[e.servico]?.price || 0,
@@ -51,6 +70,7 @@ function buildOwnerTools(client) {
         required: ["periodo"],
       },
       async execute(args) {
+        const today = sched.isoToday();
         const inicio = args.periodo === "mes" ? sched.startOfMonth(today) : sched.startOfWeek(today);
         const dias = sched.daysBetween(inicio, today);
 
@@ -91,10 +111,11 @@ function buildOwnerTools(client) {
     },
     {
       name: "registrar_fechamento",
-      description: "Fecha o dia: registra quem faltou (nomes dos clientes agendados hoje) e os encaixes feitos no balcão (serviço e quantidade). Pode ser chamada de novo para corrigir; cada chamada substitui a anterior. Devolve o faturamento real.",
+      description: "Fecha um dia: registra quem faltou (nomes dos clientes agendados naquele dia) e os encaixes feitos no balcão (serviço e quantidade). Pode ser chamada de novo para corrigir; cada chamada substitui a anterior daquele dia. Devolve o faturamento real. Aceita um parâmetro de data opcional; sem ele, fecha hoje — use-o sempre que o dono estiver fechando um dia passado (ex.: 'fechamento de sábado').",
       parameters: {
         type: "object",
         properties: {
+          ...DATA_PARAM,
           faltas: { type: "array", items: { type: "string" }, description: "Nomes dos clientes agendados que não vieram. Vazio se todos vieram." },
           encaixes: {
             type: "array",
@@ -112,7 +133,11 @@ function buildOwnerTools(client) {
         required: ["faltas", "encaixes"],
       },
       async execute(args) {
-        const events = await gcal.listEventsForDay(client.calendarId, today);
+        const dia = resolveDia(args);
+        if (dia > sched.isoToday()) {
+          throw new Error("Não é possível fechar um dia que ainda não chegou.");
+        }
+        const events = await gcal.listEventsForDay(client.calendarId, dia);
         const ativos = events.filter((e) => e.situacao !== "cancelado");
 
         // Limpa marcações de falta de uma chamada anterior, para esta ser a fonte da verdade.
@@ -148,13 +173,14 @@ function buildOwnerTools(client) {
         const atendidos = ativos.length - faltaram.length + nEncaixes;
 
         const fechamento = {
-          data: today, previsto, faltas: faltaram.map((e) => `${e.cliente} (${e.hora}, ${e.servico})`),
+          data: dia, previsto, faltas: faltaram.map((e) => `${e.cliente} (${e.hora}, ${e.servico})`),
           perdido, encaixes, extra, real, atendidos,
         };
-        await gcal.salvarFechamentoDia(client.calendarId, today, fechamento);
+        await gcal.salvarFechamentoDia(client.calendarId, dia, fechamento);
 
         return {
-          ok: true, previsto, faltas: fechamento.faltas, valor_perdido_com_faltas: perdido,
+          ok: true, dia: `${sched.WEEK[sched.fromIso(dia).getDay()]} ${sched.br(dia)}`,
+          previsto, faltas: fechamento.faltas, valor_perdido_com_faltas: perdido,
           encaixes, valor_encaixes: extra, faturamento_real: real, clientes_atendidos: atendidos,
           nomes_nao_encontrados_na_agenda: naoAchei,
         };
