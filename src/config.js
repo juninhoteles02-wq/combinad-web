@@ -24,9 +24,9 @@ const CLIENTS = [
     // fofo/de rosto liberado, combina com nichos mais afetivos). Ver prompts.js.
     emoji: { marca: "💈", estilo: "reservado" },
     services: {
-      "Corte": { min: 30, price: 45 },
-      "Barba": { min: 30, price: 35 },
-      "Corte + Barba": { min: 60, price: 70 },
+      "Corte": { min: 30, price: 30 },
+      "Barba": { min: 30, price: 25 },
+      "Corte + Barba": { min: 60, price: 50 },
     },
     // openDay/closeDay: 0=domingo .. 6=sábado
     businessHours: { openDay: 2, closeDay: 6, openHour: 9, closeHour: 19, lunchStart: 12, lunchEnd: 13 },
