@@ -71,12 +71,13 @@ async function notify(contexto, opts = {}) {
     const chave = `${contexto}|${limpar(msgErro).slice(0, 80)}`;
     const agora = Date.now();
     const anterior = ultimoEnvio.get(chave);
-    if (anterior && agora - anterior.em < DEDUPE_MS) {
+    const forcar = !!opts.forcar; // usado só no teste manual: ignora dedupe e limite
+    if (!forcar && anterior && agora - anterior.em < DEDUPE_MS) {
       anterior.suprimidos += 1;
       return false;
     }
     enviadosNaHora = enviadosNaHora.filter((t) => agora - t < 60 * 60 * 1000);
-    if (enviadosNaHora.length >= MAX_POR_HORA) return false;
+    if (!forcar && enviadosNaHora.length >= MAX_POR_HORA) return false;
 
     const phoneNumberId = numeroDoCombinado();
     if (!phoneNumberId) return false;

@@ -184,5 +184,7 @@ module.exports = {
     alertTemplate: process.env.ALERT_TEMPLATE || "",
     // "1" = avisa também quando o servidor inicia (útil para notar reinícios e o "sono" do plano gratuito).
     alertOnBoot: process.env.ALERT_ON_BOOT === "1",
+    // Senha do teste manual do alerta (/teste-alerta?chave=...). Vazia = a rota fica desligada.
+    alertTestKey: process.env.ALERT_TEST_KEY || "",
   },
 };

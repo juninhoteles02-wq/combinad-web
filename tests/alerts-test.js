@@ -57,6 +57,11 @@ async function run() {
   assert.strictEqual(enviados.length, 1);
   console.log("OK: o mesmo erro não gera um segundo alerta em sequência");
 
+  // ---- teste manual ignora dedupe ----
+  assert.strictEqual(await alerts.notify("teste manual", { erro: new Error("t"), forcar: true }), true);
+  assert.strictEqual(await alerts.notify("teste manual", { erro: new Error("t"), forcar: true }), true);
+  console.log("OK: o teste manual (forcar) sempre envia, mesmo repetido");
+
   // ---- limite por hora ----
   for (let i = 0; i < 20; i++) await alerts.notify("falha distinta " + i, { erro: new Error("e" + i) });
   assert.ok(enviados.length <= 8, "passou do limite por hora: " + enviados.length);

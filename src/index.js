@@ -223,6 +223,20 @@ function trimHistory(messages) {
 
 app.get("/", (req, res) => res.send("Combinado está de pé."));
 
+// Teste manual do alerta de falhas. Só funciona se ALERT_TEST_KEY estiver definida no
+// ambiente e a chave da URL for igual. Manda um alerta de verdade para o ALERT_PHONE e
+// diz na tela se o WhatsApp aceitou. Não mexe em nenhum dado.
+app.get("/teste-alerta", async (req, res) => {
+  if (!env.alertTestKey || req.query.chave !== env.alertTestKey) return res.sendStatus(404);
+  if (!env.alertPhone) return res.status(400).send("ALERT_PHONE não está configurado no Render.");
+  const ok = await alerts.notify("teste do alerta de falhas", { erro: new Error("Isto é só um teste. Se você recebeu esta mensagem, o alerta está funcionando."), forcar: true });
+  res
+    .status(ok ? 200 : 502)
+    .send(ok
+      ? "Alerta enviado ao WhatsApp. Confira o seu telefone."
+      : "O WhatsApp não aceitou o alerta. Provável causa: você não escreveu para o número do bot nas últimas 24h. Mande uma mensagem para ele e tente de novo (veja também os logs do Render).");
+});
+
 app.listen(env.port, () => {
   console.log(`Combinado rodando na porta ${env.port}`);
   if (env.alertOnBoot) alerts.notify("início do servidor (reinício ou volta do sono)", { erro: "" });
