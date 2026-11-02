@@ -51,6 +51,19 @@ async function listEvents(calendarId, timeMin, timeMax) {
     .map(parseEvent);
 }
 
+// Igual a listEvents, mas percorre todas as páginas (para relatórios de várias semanas).
+async function listEventsAll(calendarId, timeMin, timeMax) {
+  const calendar = await getCalendarClient();
+  const out = [];
+  let pageToken;
+  do {
+    const res = await calendar.events.list({ calendarId, timeMin, timeMax, singleEvents: true, orderBy: "startTime", maxResults: 250, pageToken });
+    (res.data.items || []).filter((ev) => ev.status !== "cancelled").forEach((ev) => out.push(parseEvent(ev)));
+    pageToken = res.data.nextPageToken;
+  } while (pageToken);
+  return out;
+}
+
 // Lista os eventos (não cancelados) de um dia inteiro na agenda do cliente.
 async function listEventsForDay(calendarId, dateISO) {
   return listEvents(calendarId, `${dateISO}T00:00:00-03:00`, `${dateISO}T23:59:59-03:00`);
@@ -341,6 +354,7 @@ async function cancelEvent(calendarId, eventId) {
 
 module.exports = {
   listEvents,
+  listEventsAll,
   listEventsForDay,
   listUpcomingForPhone,
   createEvent,

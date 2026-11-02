@@ -9,6 +9,7 @@
     "dev": "node --watch src/index.js",
     "test:logic": "node tests/logic-test.js",
     "test:alerts": "node tests/alerts-test.js",
+    "test:metricas": "node tests/metricas-test.js",
     "test:botoes": "node tests/botoes-test.js",
     "test:schedule": "node tests/scheduling-test.js",
     "test:historico": "node tests/historico-test.js"

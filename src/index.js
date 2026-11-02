@@ -1,6 +1,6 @@
 process.env.TZ = process.env.TZ || "America/Sao_Paulo"; // horário de Brasília por padrão
 const express = require("express");
-const { env, getClientByPhoneNumberId } = require("./config");
+const { env, CLIENTS, getClientByPhoneNumberId } = require("./config");
 const wa = require("./whatsapp");
 const gcal = require("./googleCalendar");
 const sched = require("./scheduling");
@@ -10,6 +10,7 @@ const { clientRules, ownerRules } = require("./prompts");
 const ownerSession = require("./ownerSession");
 const ai = require("./ai");
 const alerts = require("./alerts");
+const metricas = require("./metricas");
 const { ePerguntaDeServico } = require("./botoes");
 require("./reminders"); // agenda o lembrete da véspera (node-cron)
 
@@ -251,6 +252,25 @@ app.get("/teste-alerta", async (req, res) => {
     .send(ok
       ? "Alerta enviado ao WhatsApp. Confira o seu telefone."
       : "O WhatsApp não aceitou o alerta. Provável causa: você não escreveu para o número do bot nas últimas 24h. Mande uma mensagem para ele e tente de novo (veja também os logs do Render).");
+});
+
+// Números de uso (só leitura), protegido pela mesma senha do teste de alerta.
+// /metricas?chave=SENHA&dias=30  (padrão: desde o início do piloto, 60 dias)
+app.get("/metricas", async (req, res) => {
+  if (!env.alertTestKey || req.query.chave !== env.alertTestKey) return res.sendStatus(404);
+  try {
+    const client = CLIENTS.find((c) => c.calendarId);
+    const dias = Math.min(180, Math.max(1, Number(req.query.dias) || 60));
+    const fim = new Date(Date.now() + 14 * 24 * 3600 * 1000);
+    const ini = new Date(Date.now() - dias * 24 * 3600 * 1000);
+    const eventos = await gcal.listEventsAll(client.calendarId, ini.toISOString(), fim.toISOString());
+    const r = metricas.calcular(eventos, client.businessHours, sched.isoToday());
+    if (req.query.formato === "json") return res.json(r);
+    res.send(metricas.paraHtml(r, `${client.displayName}: últimos ${dias} dias (e próximos 14)`));
+  } catch (err) {
+    alerts.notify("relatório de métricas", { erro: err });
+    res.status(500).send("Não consegui montar o relatório agora. Veja os logs do Render.");
+  }
 });
 
 app.listen(env.port, () => {
