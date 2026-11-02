@@ -15,6 +15,7 @@ const { CLIENTS } = require("./config");
 const gcal = require("./googleCalendar");
 const sched = require("./scheduling");
 const wa = require("./whatsapp");
+const alerts = require("./alerts");
 const { getClientConvo } = require("./state");
 
 function tomorrowISO() {
@@ -67,6 +68,7 @@ function start() {
         await sendRemindersForClient(client);
       } catch (err) {
         console.error(`Erro ao enviar lembretes de ${client.displayName}:`, err);
+        alerts.notify("lembretes da véspera", { erro: err, detalhe: client.displayName });
       }
     }
   });

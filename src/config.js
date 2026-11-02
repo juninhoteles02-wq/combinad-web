@@ -178,5 +178,11 @@ module.exports = {
     openaiModel: process.env.OPENAI_MODEL || "gpt-4o-mini",
     googleKeyPath: process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH || "./secrets/combinado-servidor.json",
     port: parseInt(process.env.PORT || "3000", 10),
+    // Alerta de falhas (ver alerts.js): telefone de quem cuida do Combinado, só dígitos (ex.: 5521999999999).
+    alertPhone: (process.env.ALERT_PHONE || "").replace(/\D/g, ""),
+    // Opcional: template aprovado na Meta, com 1 variável no corpo, para quando o texto livre não chegar (fora das 24h).
+    alertTemplate: process.env.ALERT_TEMPLATE || "",
+    // "1" = avisa também quando o servidor inicia (útil para notar reinícios e o "sono" do plano gratuito).
+    alertOnBoot: process.env.ALERT_ON_BOOT === "1",
   },
 };

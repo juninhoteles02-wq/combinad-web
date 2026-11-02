@@ -8,6 +8,7 @@ const { buildOwnerTools } = require("./ownerTools");
 const { clientRules, ownerRules } = require("./prompts");
 const ownerSession = require("./ownerSession");
 const ai = require("./ai");
+const alerts = require("./alerts");
 require("./reminders"); // agenda o lembrete da véspera (node-cron)
 
 const app = express();
@@ -69,11 +70,34 @@ app.post("/webhook", async (req, res) => {
         ).catch((err) => console.error("Erro ao responder mensagem não suportada:", err));
         continue;
       }
-      handleMessage(client, msg.from, msg.text).catch((err) => console.error("Erro ao processar mensagem:", err));
+      handleMessage(client, msg.from, msg.text).catch((err) => falhaAoProcessar(client, msg.from, err));
     }
   } catch (err) {
     console.error("Erro no webhook:", err);
+    alerts.notify("recebimento de mensagens (webhook)", { erro: err });
   }
+});
+
+// Quando o processamento de uma mensagem falha (IA fora do ar, Google com erro,
+// bug inesperado), antes o cliente ficava sem resposta nenhuma. Agora ele recebe
+// um aviso simples e quem cuida do Combinado é alertado.
+async function falhaAoProcessar(client, from, err) {
+  console.error("Erro ao processar mensagem:", err);
+  alerts.notify("processamento de uma mensagem", { erro: err, telefone: from, detalhe: client.displayName });
+  try {
+    await wa.sendText(client.phoneNumberId, from, "Tive um problema aqui agora e não consegui responder direito. Pode mandar sua mensagem de novo em alguns instantes?");
+  } catch (e) {
+    console.error("Também não consegui avisar o cliente do problema:", e && e.message);
+  }
+}
+
+// Erros que escapam de tudo: avisa e, no caso grave, deixa o Render reiniciar o servidor.
+process.on("unhandledRejection", (reason) => {
+  alerts.notify("erro inesperado (promessa rejeitada)", { erro: reason instanceof Error ? reason : new Error(String(reason)) });
+});
+process.on("uncaughtException", async (err) => {
+  await Promise.race([alerts.notify("erro grave: o servidor vai reiniciar", { erro: err }), new Promise((r) => setTimeout(r, 4000))]);
+  process.exit(1);
 });
 
 async function handleMessage(client, from, text) {
@@ -199,4 +223,7 @@ function trimHistory(messages) {
 
 app.get("/", (req, res) => res.send("Combinado está de pé."));
 
-app.listen(env.port, () => console.log(`Combinado rodando na porta ${env.port}`));
+app.listen(env.port, () => {
+  console.log(`Combinado rodando na porta ${env.port}`);
+  if (env.alertOnBoot) alerts.notify("início do servidor (reinício ou volta do sono)", { erro: "" });
+});

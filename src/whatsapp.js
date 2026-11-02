@@ -1,82 +1,81 @@
 const { env } = require("./config");
+const alerts = require("./alerts");
+
+// Envio comum: tenta de novo quando a falha é passageira (rede, 429, 5xx) e,
+// se mesmo assim não der, avisa quem cuida do Combinado (ver alerts.js).
+// Devolve true/false como antes: quem chama não precisa mudar nada.
+async function postMessage(phoneNumberId, payload, rotulo, telefone) {
+  const url = `https://graph.facebook.com/${env.graphVersion}/${phoneNumberId}/messages`;
+  try {
+    await alerts.comRetry(async () => {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.whatsappToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ messaging_product: "whatsapp", to: payload.to, ...payload.body }),
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        const err = new Error(`WhatsApp respondeu ${res.status}: ${errText.slice(0, 300)}`);
+        err.status = res.status;
+        throw err;
+      }
+    });
+    return true;
+  } catch (err) {
+    console.error(`Falha ao enviar ${rotulo}:`, err.message);
+    alerts.notify(`envio de ${rotulo} pelo WhatsApp`, { erro: err, telefone }); // sem await: não atrasa a resposta
+    return false;
+  }
+}
 
 async function sendText(phoneNumberId, to, body) {
-  const url = `https://graph.facebook.com/${env.graphVersion}/${phoneNumberId}/messages`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.whatsappToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to,
-      type: "text",
-      text: { body },
-    }),
-  });
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error("Falha ao enviar WhatsApp:", res.status, errText);
-  }
-  return res.ok;
+  return postMessage(phoneNumberId, { to, body: { type: "text", text: { body } } }, "mensagem", to);
 }
 
 // Envia um template aprovado (necessário para o lembrete da véspera, que é
 // mensagem iniciada pela empresa, fora da janela de 24h de conversa aberta).
 async function sendTemplate(phoneNumberId, to, templateName, languageCode, components) {
-  const url = `https://graph.facebook.com/${env.graphVersion}/${phoneNumberId}/messages`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.whatsappToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
+  return postMessage(
+    phoneNumberId,
+    {
       to,
-      type: "template",
-      template: { name: templateName, language: { code: languageCode || "pt_BR" }, components: components || [] },
-    }),
-  });
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error("Falha ao enviar template WhatsApp:", res.status, errText);
-  }
-  return res.ok;
+      body: {
+        type: "template",
+        template: { name: templateName, language: { code: languageCode || "pt_BR" }, components: components || [] },
+      },
+    },
+    "template",
+    to
+  );
 }
 
 // Envia até 3 botões de resposta rápida (o cliente toca, não precisa digitar).
 // buttons: [{ id, title }], title com no máximo 20 caracteres (limite da Meta).
 async function sendButtons(phoneNumberId, to, bodyText, buttons) {
-  const url = `https://graph.facebook.com/${env.graphVersion}/${phoneNumberId}/messages`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.whatsappToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
+  return postMessage(
+    phoneNumberId,
+    {
       to,
-      type: "interactive",
-      interactive: {
-        type: "button",
-        body: { text: bodyText },
-        action: {
-          buttons: buttons.slice(0, 3).map((b) => ({
-            type: "reply",
-            reply: { id: String(b.id).slice(0, 256), title: String(b.title).slice(0, 20) },
-          })),
+      body: {
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: { text: bodyText },
+          action: {
+            buttons: buttons.slice(0, 3).map((b) => ({
+              type: "reply",
+              reply: { id: String(b.id).slice(0, 256), title: String(b.title).slice(0, 20) },
+            })),
+          },
         },
       },
-    }),
-  });
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error("Falha ao enviar botões WhatsApp:", res.status, errText);
-  }
-  return res.ok;
+    },
+    "botões",
+    to
+  );
 }
 
 // Tipos de mensagem que recebemos mas não conseguimos "ler" (não é texto).

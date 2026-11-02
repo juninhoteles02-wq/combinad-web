@@ -6,6 +6,7 @@
 
 const OpenAI = require("openai");
 const { env } = require("./config");
+const alerts = require("./alerts");
 
 const client = new OpenAI({ apiKey: env.openaiKey });
 
@@ -46,6 +47,9 @@ async function runConversation({ systemPrompt, history, tools, maxRounds = 6 }) 
           result = await tool.execute(args);
         } catch (err) {
           result = { error: err.message || String(err) };
+          // Erro de regra ("horário não está livre") é normal e o modelo explica ao cliente.
+          // Erro de infraestrutura (Google fora do ar, credencial vencida) precisa chegar a quem cuida.
+          if (alerts.ehErroDeInfra(err)) alerts.notify(`ferramenta ${call.function.name}`, { erro: err });
         }
       }
       messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
