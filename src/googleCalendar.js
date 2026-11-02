@@ -78,6 +78,7 @@ function parseEvent(ev) {
     telefone: priv.telefone || "",
     origem: priv.origem || "balcao",
     situacao: priv.situacao || "agendado", // agendado | confirmado | cancelado | faltou
+    lembreteEm: priv.lembreteEm || null, // quando o lembrete da véspera foi enviado (ISO); fica no próprio evento, então sobrevive a reinício do servidor
     raw: ev,
   };
 }

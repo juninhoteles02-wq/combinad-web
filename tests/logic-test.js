@@ -16,6 +16,8 @@ const { buildOwnerTools } = require("../src/ownerTools");
 const client = getClientById("elias");
 const today = sched.isoToday();
 const tomorrow = sched.nextOpenDays(client.businessHours, 6)[1];
+// Preços lidos do config (assim o teste não quebra quando o dono muda os valores).
+const PRECO = Object.fromEntries(Object.entries(client.services).map(([nome, sv]) => [nome, sv.price]));
 
 // ---- agenda falsa em memória ----
 let seq = 1;
@@ -58,6 +60,11 @@ gcal.moveEvent = async (calendarId, eventId, { dateISO, hora, minutos, barbeiro 
 };
 gcal.setSituacao = async (calendarId, eventId, situacao) => { const ev = events.find((e) => e.id === eventId); ev.situacao = situacao; return ev; };
 gcal.cancelEvent = async (calendarId, eventId) => { events = events.filter((e) => e.id !== eventId); return { ok: true }; };
+
+gcal.nomeConhecido = async () => null;
+gcal.salvarNomeCliente = async () => ({ ok: true });
+gcal.salvarFechamentoDia = async () => ({ ok: true });
+gcal.buscarFechamentoDia = async () => null;
 
 async function run() {
   const telefone = "5521988887777";
@@ -123,12 +130,55 @@ async function run() {
 
   const resumo = await ownerByName.resumo_do_dia.execute({});
   assert.strictEqual(resumo.quantidade, 2);
-  assert.strictEqual(resumo.previsto, 45 + 70);
+  assert.strictEqual(resumo.previsto, PRECO["Corte"] + PRECO["Corte + Barba"]);
   console.log("OK: resumo_do_dia soma previsto corretamente:", resumo.previsto);
 
   const fechamento = await ownerByName.registrar_fechamento.execute({ faltas: ["Marcos"], encaixes: [{ servico: "Corte", quantidade: 2 }] });
-  assert.strictEqual(fechamento.faturamento_real, (45 + 70) - 45 + 2 * 45);
+  assert.strictEqual(fechamento.faturamento_real, (PRECO["Corte"] + PRECO["Corte + Barba"]) - PRECO["Corte"] + 2 * PRECO["Corte"]);
   console.log("OK: registrar_fechamento calcula faturamento real:", fechamento.faturamento_real);
+
+  // ---- lembrete da véspera sobrevive a reinício do servidor ----
+  const { lembretePendente } = require("../src/state");
+  const wa = require("../src/whatsapp");
+  const reminders = require("../src/reminders");
+  const { clientConversations } = require("../src/state");
+
+  events = [];
+  const amanha = (() => { const d = sched.fromIso(sched.isoToday()); d.setDate(d.getDate() + 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })();
+  const aberto = sched.isOpenDay(amanha, client.businessHours);
+  const evA = makeEvent({ dateISO: amanha, hora: "10:00", minutos: 30, cliente: "Ana", servico: "Corte", barbeiro: "Elias", telefone: "5521911112222" });
+  events.push(evA);
+  const enviados = [];
+  wa.sendTemplate = async (pn, to) => { enviados.push(to); return true; };
+  client.calendarId = client.calendarId || "cal123"; client.phoneNumberId = client.phoneNumberId || "PN123";
+
+  if (aberto) {
+    await reminders.sendRemindersForClient(client);
+    assert.deepStrictEqual(enviados, ["5521911112222"]);
+    assert.ok(evA.lembreteEm, "deveria gravar lembreteEm no evento");
+    console.log("OK: lembrete enviado e marcador gravado no evento");
+
+    await reminders.sendRemindersForClient(client);
+    assert.strictEqual(enviados.length, 1);
+    console.log("OK: segundo disparo não reenvia o lembrete");
+  } else {
+    console.log("(amanhã é dia fechado: testes de envio do lembrete pulados)");
+    evA.lembreteEm = new Date().toISOString();
+  }
+
+  // simula reinício: a memória some, mas o evento ainda tem o marcador
+  clientConversations.clear();
+  assert.strictEqual(lembretePendente(null, [evA]), evA.id);
+  console.log("OK: depois do reinício, o lembrete pendente é achado pela agenda");
+
+  evA.situacao = "confirmado";
+  assert.strictEqual(lembretePendente(null, [evA]), null);
+  console.log("OK: agendamento já confirmado não é tratado como lembrete pendente");
+
+  const evB = makeEvent({ dateISO: amanha, hora: "11:00", minutos: 30, cliente: "Ana", servico: "Barba", barbeiro: "Elias", telefone: "5521911112222" });
+  evB.lembreteEm = "2026-01-01T00:00:00.000Z"; evA.situacao = "agendado"; evA.lembreteEm = "2026-02-01T00:00:00.000Z";
+  assert.strictEqual(lembretePendente(null, [evB, evA]), evA.id);
+  console.log("OK: com dois lembretes, vale o mais recente");
 
   console.log("\nTodos os testes de lógica passaram.");
 }
