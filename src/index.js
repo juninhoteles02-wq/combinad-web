@@ -14,7 +14,7 @@ const app = express();
 app.use(express.json());
 
 // ---------- estado em memória (por conversa) ----------
-const { getClientConvo } = require("./state");
+const { getClientConvo, lembretePendente } = require("./state");
 const ownerConversations = new Map(); // phone -> { history }
 const ownerPending = new Map(); // phone -> { awaitingCode: bool, pendingText: string|null }
 const seenMessageIds = [];
@@ -92,9 +92,11 @@ async function handleClientMessage(client, from, text) {
     .join("; ");
   const nomeSalvo = upcoming[0]?.cliente || (await gcal.nomeConhecido(client.calendarId, from));
 
+  const lembreteId = lembretePendente(convo.lastReminderEventId, upcoming);
+
   let botoesEnviados = false;
   const ctx = {
-    lastReminderEventId: convo.lastReminderEventId,
+    lastReminderEventId: lembreteId,
     onCallBarber: async (motivo) => {
       if (client.owner.phone) {
         await wa.sendText(client.phoneNumberId, client.owner.phone, `🔔 Um cliente pediu atendimento pelo Combinado.\nMotivo: ${motivo}`);
@@ -113,7 +115,7 @@ async function handleClientMessage(client, from, text) {
     },
   };
   const tools = buildTools(client, from, ctx);
-  const systemPrompt = clientRules(client, from, agendaTexto, convo.lastReminderEventId, nomeSalvo);
+  const systemPrompt = clientRules(client, from, agendaTexto, lembreteId, nomeSalvo);
 
   const { text: reply, messages } = await ai.runConversation({
     systemPrompt,

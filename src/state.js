@@ -10,4 +10,17 @@ function getClientConvo(phone) {
   return clientConversations.get(phone);
 }
 
-module.exports = { clientConversations, getClientConvo };
+// Qual agendamento o cliente está confirmando quando responde "1"/"confirmo"?
+// Primeiro vale o que está na memória (lembrete enviado desde a última vez que o
+// servidor iniciou). Se o servidor reiniciou, a memória some, então cai para o
+// marcador `lembreteEm` gravado no próprio evento do Google Agenda: pega o
+// lembrete enviado mais recentemente que ainda não foi confirmado.
+function lembretePendente(memoriaId, upcoming) {
+  if (memoriaId && upcoming.some((e) => e.id === memoriaId)) return memoriaId;
+  const candidatos = upcoming
+    .filter((e) => e.lembreteEm && e.situacao === "agendado")
+    .sort((a, b) => String(b.lembreteEm).localeCompare(String(a.lembreteEm)));
+  return candidatos[0] ? candidatos[0].id : memoriaId || null;
+}
+
+module.exports = { clientConversations, getClientConvo, lembretePendente };

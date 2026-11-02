@@ -28,7 +28,8 @@ async function sendRemindersForClient(client) {
   const amanha = tomorrowISO();
   if (!sched.isOpenDay(amanha, client.businessHours)) return;
   const events = await gcal.listEventsForDay(client.calendarId, amanha);
-  const pendentes = events.filter((e) => e.situacao === "agendado" && e.telefone);
+  // Pula quem já recebeu o lembrete (ex.: o job rodou duas vezes ou o servidor reiniciou).
+  const pendentes = events.filter((e) => e.situacao === "agendado" && e.telefone && !e.lembreteEm);
 
   for (const ev of pendentes) {
     const dia = `${sched.WEEK[sched.fromIso(amanha).getDay()]} (${sched.br(amanha)})`;
@@ -45,6 +46,11 @@ async function sendRemindersForClient(client) {
     if (ok) {
       const convo = getClientConvo(ev.telefone);
       convo.lastReminderEventId = ev.id;
+      try {
+        await gcal.patchEvent(client.calendarId, ev.id, { extendedProperties: { private: { lembreteEm: new Date().toISOString() } } });
+      } catch (err) {
+        console.error(`Lembrete enviado, mas não consegui gravar o marcador no evento ${ev.id}:`, err.message);
+      }
       console.log(`Lembrete enviado para ${ev.cliente} (${ev.telefone}) - ${client.displayName}`);
     }
   }
