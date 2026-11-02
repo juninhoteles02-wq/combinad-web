@@ -186,5 +186,7 @@ module.exports = {
     alertOnBoot: process.env.ALERT_ON_BOOT === "1",
     // Senha do teste manual do alerta (/teste-alerta?chave=...). Vazia = a rota fica desligada.
     alertTestKey: process.env.ALERT_TEST_KEY || "",
+    // Senha das páginas de administração (formulário de cadastro). Se não houver ADMIN_KEY, vale a mesma do teste de alerta.
+    adminKey: process.env.ADMIN_KEY || process.env.ALERT_TEST_KEY || "",
   },
 };

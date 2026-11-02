@@ -188,16 +188,10 @@ async function run() {
   const ownerToolsFin = buildOwnerTools({ ...client, recursos: { financeiro: true } });
   const semCustos = await ownerToolsFin.find((t) => t.name === "analise_financeira").execute({});
   assert(semCustos.aviso, "sem custos cadastrados deve avisar");
-  const def = await ownerToolsFin.find((t) => t.name === "definir_custos").execute({
-    fixos: [{ nome: "Aluguel", valor: 800 }, { nome: "Luz", valor: 150 }],
-    material_por_servico: [{ servico: "Corte", valor: 3 }],
-  });
-  assert.strictEqual(def.total_fixos_mensais, 950);
-  const def2 = await ownerToolsFin.find((t) => t.name === "definir_custos").execute({ fixos: [{ nome: "Luz", valor: 0 }, { nome: "Internet", valor: 100 }] });
-  assert.strictEqual(def2.total_fixos_mensais, 900);
-  assert.strictEqual(def2.custo_de_material_por_servico.Corte, 3, "material anterior preservado");
+  custosSalvos = { id: "C1", fixos: "Aluguel:800|Internet:100", variaveis: "Corte:3", financeiro: true };
   const ver = await ownerToolsFin.find((t) => t.name === "ver_custos").execute({});
   assert.strictEqual(ver.custos_fixos.length, 2);
+  assert(!ownerToolsFin.some((t) => t.name === "definir_custos"), "o dono não cadastra custos pelo WhatsApp");
   const an = await ownerToolsFin.find((t) => t.name === "analise_financeira").execute({});
   assert.strictEqual(an.custos_fixos_mensais, 900);
   assert(Array.isArray(an.margem_por_servico) && an.margem_por_servico.length === Object.keys(client.services).length);

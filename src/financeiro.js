@@ -79,4 +79,16 @@ function analisar(d) {
   };
 }
 
-module.exports = { analisar, margemPorServico, mesclarFixos, totalFixos, fixosParaTexto, textoParaFixos, variaveisParaTexto, textoParaVariaveis, limparNome };
+// Converte o corpo do formulário (nomes e valores em listas) em { fixos, variaveis }.
+function paraLista(v) { return v === undefined ? [] : Array.isArray(v) ? v : [v]; }
+function numero(v) { const n = Number(String(v || "").replace(/\./g, "").replace(",", ".")); return Number.isFinite(n) ? n : NaN; }
+function formParaCustos(body, services) {
+  const nomes = paraLista(body.nome), valores = paraLista(body.valor);
+  const itens = nomes.map((n, i) => ({ nome: n, valor: numero(valores[i]) })).filter((f) => limparNome(f.nome) && f.valor > 0);
+  const fixos = mesclarFixos([], itens, true);
+  const variaveis = {};
+  Object.keys(services).forEach((s) => { const n = numero(body["mat_" + s]); if (n > 0) variaveis[s] = n; });
+  return { fixos, variaveis, financeiro: body.financeiro === "1" };
+}
+
+module.exports = { formParaCustos, numero, analisar, margemPorServico, mesclarFixos, totalFixos, fixosParaTexto, textoParaFixos, variaveisParaTexto, textoParaVariaveis, limparNome };

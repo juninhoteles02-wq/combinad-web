@@ -11,11 +11,14 @@ const ownerSession = require("./ownerSession");
 const ai = require("./ai");
 const alerts = require("./alerts");
 const metricas = require("./metricas");
+const fin = require("./financeiro");
+const { paginaCadastro } = require("./admin");
 const { ePerguntaDeServico } = require("./botoes");
 require("./reminders"); // agenda o lembrete da véspera (node-cron)
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // ---------- estado em memória (por conversa) ----------
 const { getClientConvo, lembretePendente } = require("./state");
@@ -216,8 +219,16 @@ async function handleOwnerMessage(client, from, text) {
 async function processOwnerText(client, from, text) {
   const convo = getOwnerConvo(from);
   convo.history.push({ role: "user", content: text });
-  const tools = buildOwnerTools(client);
-  const systemPrompt = ownerRules(client);
+  // O recurso financeiro (plano Premium) é ligado pelo formulário de cadastro.
+  let comRecursos = client;
+  try {
+    const custos = await gcal.buscarCustos(client.calendarId);
+    comRecursos = { ...client, recursos: { ...(client.recursos || {}), financeiro: !!((client.recursos && client.recursos.financeiro) || custos.financeiro) } };
+  } catch (err) {
+    console.error("Não consegui ler o cadastro de custos:", err.message);
+  }
+  const tools = buildOwnerTools(comRecursos);
+  const systemPrompt = ownerRules(comRecursos);
   const { text: reply, messages } = await ai.runConversation({
     systemPrompt,
     history: convo.history.slice(-16),
@@ -270,6 +281,31 @@ app.get("/metricas", async (req, res) => {
   } catch (err) {
     alerts.notify("relatório de métricas", { erro: err });
     res.status(500).send("Não consegui montar o relatório agora. Veja os logs do Render.");
+  }
+});
+
+// Formulário de cadastro de custos (só a equipe do Combinado usa; senha ADMIN_KEY ou ALERT_TEST_KEY).
+function clienteAdmin() { return CLIENTS.find((c) => c.calendarId); }
+function chaveOk(chave) { return !!env.adminKey && chave === env.adminKey; }
+async function mostrarCadastro(res, chave, aviso) {
+  const client = clienteAdmin();
+  const c = await gcal.buscarCustos(client.calendarId);
+  res.send(paginaCadastro({ client, chave, fixos: fin.textoParaFixos(c.fixos), variaveis: fin.textoParaVariaveis(c.variaveis), financeiro: c.financeiro, aviso }));
+}
+app.get("/admin/cadastro", async (req, res) => {
+  if (!chaveOk(req.query.chave)) return res.sendStatus(404);
+  try { await mostrarCadastro(res, req.query.chave); } catch (err) { alerts.notify("cadastro de custos", { erro: err }); res.status(500).send("Não consegui abrir o cadastro agora."); }
+});
+app.post("/admin/cadastro", async (req, res) => {
+  if (!chaveOk(req.body && req.body.chave)) return res.sendStatus(404);
+  try {
+    const client = clienteAdmin();
+    const dados = fin.formParaCustos(req.body, client.services);
+    await gcal.salvarCustos(client.calendarId, { fixos: fin.fixosParaTexto(dados.fixos), variaveis: fin.variaveisParaTexto(dados.variaveis), financeiro: dados.financeiro });
+    await mostrarCadastro(res, req.body.chave, `Salvo: ${dados.fixos.length} custos fixos, total R$ ${fin.totalFixos(dados.fixos)} por mês. Plano Premium ${dados.financeiro ? "ligado" : "desligado"}.`);
+  } catch (err) {
+    alerts.notify("cadastro de custos", { erro: err });
+    res.status(500).send("Não consegui salvar agora. Veja os logs do Render.");
   }
 });
 

@@ -32,4 +32,12 @@ assert.strictEqual(corte.lucro_apos_custo_fixo, 17);
 const z = f.analisar({ fixos: [{ nome: "A", valor: 500 }], variaveis: {}, services, faturamento: 0, atendimentosPorServico: {}, diasAbertosDecorridos: 0, diasAbertosNoMes: 20 });
 assert.strictEqual(z.ponto_de_equilibrio_atendimentos_no_mes, null);
 assert.strictEqual(z.projecao_atendimentos_no_mes, null);
+// formulário
+const fo = f.formParaCustos({ nome: ["Aluguel", "Luz", ""], valor: ["1.200,50", "150", "99"], mat_Corte: "3,5", mat_Barba: "", financeiro: "1" }, services);
+assert.strictEqual(f.totalFixos(fo.fixos), 1350.5);
+assert.deepStrictEqual(fo.variaveis, { Corte: 3.5 });
+assert.strictEqual(fo.financeiro, true);
+const um = f.formParaCustos({ nome: "Aluguel", valor: "800" }, services);
+assert.strictEqual(um.fixos.length, 1); assert.strictEqual(um.financeiro, false);
+assert.strictEqual(f.formParaCustos({}, services).fixos.length, 0);
 console.log("financeiro-test OK");

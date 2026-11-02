@@ -121,29 +121,6 @@ function buildOwnerTools(client) {
       },
     },
     {
-      name: "definir_custos",
-      description: "Cadastra ou atualiza a lista de custos. 'fixos' são gastos mensais (aluguel, luz, água, internet, produtos de uso geral, comissão fixa etc.) com valor em reais por mês. 'material_por_servico' é quanto se gasta de material em cada atendimento daquele serviço (lâmina, talco, navalha etc.), em reais. Itens novos são somados aos que já existem; um item com o mesmo nome é atualizado; valor 0 remove o item. Só use 'substituir_tudo' se o dono pedir para apagar a lista e começar de novo. Nunca invente valores: só registre o que o dono disse.",
-      parameters: {
-        type: "object",
-        properties: {
-          fixos: { type: "array", items: { type: "object", properties: { nome: { type: "string" }, valor: { type: "number" } }, required: ["nome", "valor"] } },
-          material_por_servico: { type: "array", items: { type: "object", properties: { servico: { type: "string", enum: Object.keys(client.services) }, valor: { type: "number" } }, required: ["servico", "valor"] } },
-          substituir_tudo: { type: "boolean" },
-        },
-      },
-      async execute(args) {
-        const atual = await gcal.buscarCustos(client.calendarId);
-        const base = args.substituir_tudo ? [] : fin.textoParaFixos(atual.fixos);
-        const fixos = fin.mesclarFixos(base, args.fixos || [], !!args.substituir_tudo);
-        const variaveis = args.substituir_tudo ? {} : fin.textoParaVariaveis(atual.variaveis);
-        (args.material_por_servico || []).forEach((m) => {
-          if (client.services[m.servico] && Number(m.valor) >= 0) { if (Number(m.valor) === 0) delete variaveis[m.servico]; else variaveis[m.servico] = Number(m.valor); }
-        });
-        await gcal.salvarCustos(client.calendarId, { fixos: fin.fixosParaTexto(fixos), variaveis: fin.variaveisParaTexto(variaveis) });
-        return { ok: true, custos_fixos: fixos, total_fixos_mensais: fin.totalFixos(fixos), custo_de_material_por_servico: variaveis };
-      },
-    },
-    {
       name: "analise_financeira",
       description: "Calcula lucro do mês até agora, ponto de equilíbrio (quantos atendimentos por mês pagam as contas), projeção do mês e custo/margem de cada serviço. Usa só os dias que o dono já fechou (faturamento confirmado). Precisa dos custos cadastrados; se não houver, devolve um aviso para cadastrar primeiro.",
       parameters: { type: "object", properties: {} },
@@ -151,7 +128,7 @@ function buildOwnerTools(client) {
         const c = await gcal.buscarCustos(client.calendarId);
         const fixos = fin.textoParaFixos(c.fixos);
         const variaveis = fin.textoParaVariaveis(c.variaveis);
-        if (fixos.length === 0) return { aviso: "Ainda não há custos fixos cadastrados. Peça ao dono a lista (aluguel, luz, água, internet, produtos, etc.) e use definir_custos." };
+        if (fixos.length === 0) return { aviso: "Ainda não há custos fixos cadastrados. Peça ao dono a lista (aluguel, luz, água, internet, produtos, etc.) e peça para ele falar com a equipe do Combinado." };
 
         const hoje = sched.isoToday();
         const inicio = sched.startOfMonth(hoje);
@@ -253,8 +230,8 @@ function buildOwnerTools(client) {
     },
   ];
   // Custos e lucro são do plano Premium: ficam desligados até o cliente ter o recurso
-  // (client.recursos.financeiro = true no config.js).
-  const FINANCEIRO = ["ver_custos", "definir_custos", "analise_financeira"];
+  // (client.recursos.financeiro, ligado pelo formulário de cadastro).
+  const FINANCEIRO = ["ver_custos", "analise_financeira"];
   const financeiroLigado = !!(client.recursos && client.recursos.financeiro);
   return todas.filter((t) => financeiroLigado || !FINANCEIRO.includes(t.name));
 }
