@@ -184,19 +184,21 @@ async function run() {
   console.log("OK: com dois lembretes, vale o mais recente");
 
   // ---- custos do dono ----
-  const semCustos = await ownerTools.find((t) => t.name === "analise_financeira").execute({});
+  assert(!buildOwnerTools(client).some((t) => t.name === "analise_financeira"), "financeiro desligado por padrão");
+  const ownerToolsFin = buildOwnerTools({ ...client, recursos: { financeiro: true } });
+  const semCustos = await ownerToolsFin.find((t) => t.name === "analise_financeira").execute({});
   assert(semCustos.aviso, "sem custos cadastrados deve avisar");
-  const def = await ownerTools.find((t) => t.name === "definir_custos").execute({
+  const def = await ownerToolsFin.find((t) => t.name === "definir_custos").execute({
     fixos: [{ nome: "Aluguel", valor: 800 }, { nome: "Luz", valor: 150 }],
     material_por_servico: [{ servico: "Corte", valor: 3 }],
   });
   assert.strictEqual(def.total_fixos_mensais, 950);
-  const def2 = await ownerTools.find((t) => t.name === "definir_custos").execute({ fixos: [{ nome: "Luz", valor: 0 }, { nome: "Internet", valor: 100 }] });
+  const def2 = await ownerToolsFin.find((t) => t.name === "definir_custos").execute({ fixos: [{ nome: "Luz", valor: 0 }, { nome: "Internet", valor: 100 }] });
   assert.strictEqual(def2.total_fixos_mensais, 900);
   assert.strictEqual(def2.custo_de_material_por_servico.Corte, 3, "material anterior preservado");
-  const ver = await ownerTools.find((t) => t.name === "ver_custos").execute({});
+  const ver = await ownerToolsFin.find((t) => t.name === "ver_custos").execute({});
   assert.strictEqual(ver.custos_fixos.length, 2);
-  const an = await ownerTools.find((t) => t.name === "analise_financeira").execute({});
+  const an = await ownerToolsFin.find((t) => t.name === "analise_financeira").execute({});
   assert.strictEqual(an.custos_fixos_mensais, 900);
   assert(Array.isArray(an.margem_por_servico) && an.margem_por_servico.length === Object.keys(client.services).length);
   console.log("OK: custos do dono cadastrados e analisados");

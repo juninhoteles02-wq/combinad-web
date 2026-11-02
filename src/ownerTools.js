@@ -25,7 +25,7 @@ function buildOwnerTools(client) {
     },
   };
 
-  return [
+  const todas = [
     {
       name: "ver_agenda_do_dia",
       description: "Mostra a agenda de um dia (hora, cliente, serviço, status) só pra consulta — não é o fechamento do dia, não fala de faturamento e não pergunta sobre faltas ou encaixes. Aceita um parâmetro de data opcional; sem ele, mostra hoje.",
@@ -252,6 +252,11 @@ function buildOwnerTools(client) {
       },
     },
   ];
+  // Custos e lucro são do plano Premium: ficam desligados até o cliente ter o recurso
+  // (client.recursos.financeiro = true no config.js).
+  const FINANCEIRO = ["ver_custos", "definir_custos", "analise_financeira"];
+  const financeiroLigado = !!(client.recursos && client.recursos.financeiro);
+  return todas.filter((t) => financeiroLigado || !FINANCEIRO.includes(t.name));
 }
 
 module.exports = { buildOwnerTools };
