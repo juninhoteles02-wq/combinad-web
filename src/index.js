@@ -1,3 +1,4 @@
+process.env.TZ = process.env.TZ || "America/Sao_Paulo"; // horário de Brasília por padrão
 const express = require("express");
 const { env, getClientByPhoneNumberId } = require("./config");
 const wa = require("./whatsapp");
@@ -9,6 +10,7 @@ const { clientRules, ownerRules } = require("./prompts");
 const ownerSession = require("./ownerSession");
 const ai = require("./ai");
 const alerts = require("./alerts");
+const { ePerguntaDeServico } = require("./botoes");
 require("./reminders"); // agenda o lembrete da véspera (node-cron)
 
 const app = express();
@@ -108,6 +110,15 @@ async function handleMessage(client, from, text) {
 
 async function handleClientMessage(client, from, text) {
   const convo = getClientConvo(from);
+  if (convo.history.length === 0 && !convo.historicoCarregado) {
+    // Servidor reiniciou (ou conversa nova): tenta recuperar o contexto salvo.
+    convo.historicoCarregado = true;
+    try {
+      convo.history = await gcal.carregarHistorico(client.calendarId, from);
+    } catch (err) {
+      console.error("Não consegui carregar o histórico salvo:", err.message);
+    }
+  }
   convo.history.push({ role: "user", content: text });
 
   const upcoming = await gcal.listUpcomingForPhone(client.calendarId, from);
@@ -150,7 +161,12 @@ async function handleClientMessage(client, from, text) {
   convo.history = trimHistory(messages);
   const finalText = (reply || "").trim();
   convo.history.push({ role: "assistant", content: finalText || "(opções de serviço enviadas por botões)" });
-  if (finalText) {
+  // Guarda o contexto em segundo plano; se falhar, a conversa segue normal.
+  gcal.salvarHistorico(client.calendarId, from, convo.history).catch((err) => console.error("Não consegui salvar o histórico:", err.message));
+  if (finalText && !botoesEnviados && ePerguntaDeServico(finalText, client.services)) {
+    // A IA perguntou o serviço em texto: troca pelos botões.
+    await ctx.enviarOpcoesServico();
+  } else if (finalText) {
     // A IA escreveu algo: manda normal (cobre também o caso raro de ela
     // escrever algo mesmo depois de mandar os botões).
     await wa.sendText(client.phoneNumberId, from, finalText);

@@ -1,0 +1,10 @@
+const assert = require("assert");
+const { ePerguntaDeServico } = require("../src/botoes");
+const sv = { Corte: {}, Barba: {}, "Corte + Barba": {} };
+assert(ePerguntaDeServico("Qual serviço você quer?", sv));
+assert(ePerguntaDeServico("Beleza! Que serviço vai ser hoje?", sv));
+assert(ePerguntaDeServico("Posso fazer Corte, Barba ou Corte + Barba. Qual prefere?", sv));
+assert(!ePerguntaDeServico("Pronto, seu Corte está agendado para terça às 10h!", sv));
+assert(!ePerguntaDeServico("Qual horário fica melhor pra você?", sv));
+assert(!ePerguntaDeServico("O Corte custa R$ 30.", sv));
+console.log("botoes-test OK");

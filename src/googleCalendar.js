@@ -117,7 +117,7 @@ async function findRegistroCliente(calendarId, telefone) {
   const ev = (res.data.items || [])[0];
   if (!ev) return null;
   const priv = (ev.extendedProperties && ev.extendedProperties.private) || {};
-  return { id: ev.id, cliente: priv.cliente || null };
+  return { id: ev.id, cliente: priv.cliente || null, priv };
 }
 
 // Busca só o nome (usado pra montar o contexto da conversa).
@@ -155,6 +155,70 @@ async function salvarNomeCliente(calendarId, telefone, nome) {
       },
     },
   });
+}
+
+
+// ---------- memória da conversa (sobrevive a reinício do servidor) ----------
+// Guarda as últimas mensagens (curtas) no mesmo registro oculto do cliente.
+// Cada propriedade privada aceita ~1000 caracteres, então o JSON é partido em pedaços.
+const HIST_MAX_TURNOS = 6;
+const HIST_MAX_CHARS_TURNO = 160;
+const HIST_PEDACO = 900;
+const HIST_MAX_PEDACOS = 5;
+
+function empacotarHistorico(history) {
+  const turnos = (history || [])
+    .filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content)
+    .slice(-HIST_MAX_TURNOS)
+    .map((m) => ({ r: m.role === "user" ? "u" : "a", c: m.content.slice(0, HIST_MAX_CHARS_TURNO) }));
+  const json = JSON.stringify(turnos);
+  const pedacos = [];
+  for (let i = 0; i < json.length && pedacos.length < HIST_MAX_PEDACOS; i += HIST_PEDACO) pedacos.push(json.slice(i, i + HIST_PEDACO));
+  return pedacos;
+}
+
+function desempacotarHistorico(priv) {
+  try {
+    const n = Number(priv.hist_n || 0);
+    if (!n) return [];
+    let json = "";
+    for (let i = 0; i < n; i++) json += priv[`hist_${i}`] || "";
+    const turnos = JSON.parse(json);
+    return turnos.map((t) => ({ role: t.r === "u" ? "user" : "assistant", content: t.c }));
+  } catch (_) {
+    return []; // histórico corrompido ou cortado: começa do zero
+  }
+}
+
+async function salvarHistorico(calendarId, telefone, history) {
+  if (!telefone) return;
+  const pedacos = empacotarHistorico(history);
+  const priv = { tipo: "cadastro_cliente", telefone, hist_n: String(pedacos.length) };
+  for (let i = 0; i < HIST_MAX_PEDACOS; i++) priv[`hist_${i}`] = i < pedacos.length ? pedacos[i] : null;
+  const calendar = await getCalendarClient();
+  const existente = await findRegistroCliente(calendarId, telefone);
+  if (existente) {
+    await calendar.events.patch({ calendarId, eventId: existente.id, requestBody: { extendedProperties: { private: priv } } });
+    return;
+  }
+  for (const k of Object.keys(priv)) if (priv[k] === null) delete priv[k];
+  await calendar.events.insert({
+    calendarId,
+    requestBody: {
+      summary: "Cadastro de cliente (Combinado)",
+      description: "Registro interno do Combinado, não é um agendamento.",
+      start: { date: REGISTRO_DATA },
+      end: { date: "2020-01-02" },
+      transparency: "transparent",
+      visibility: "private",
+      extendedProperties: { private: priv },
+    },
+  });
+}
+
+async function carregarHistorico(calendarId, telefone) {
+  const registro = await findRegistroCliente(calendarId, telefone);
+  return registro ? desempacotarHistorico(registro.priv) : [];
 }
 
 // ---------- fechamento do dia (permanente, no Google Calendar) ----------
@@ -287,6 +351,10 @@ module.exports = {
   addMinutes,
   nomeConhecido,
   salvarNomeCliente,
+  salvarHistorico,
+  carregarHistorico,
+  empacotarHistorico,
+  desempacotarHistorico,
   salvarFechamentoDia,
   buscarFechamentoDia,
 };

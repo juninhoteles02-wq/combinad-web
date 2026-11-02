@@ -58,9 +58,7 @@ async function sendRemindersForClient(client) {
 }
 
 function start() {
-  // "0 18 * * *" = todo dia às 18h no fuso do processo. Se o servidor rodar
-  // em UTC (comum em provedores de nuvem), ajuste para "0 21 * * *" (18h em
-  // São Paulo = 21h UTC) ou configure TZ=America/Sao_Paulo no ambiente.
+  // Todo dia às 18h, sempre no horário de Brasília (não depende do fuso do servidor).
   cron.schedule("0 18 * * *", async () => {
     for (const client of CLIENTS) {
       if (!client.calendarId || !client.phoneNumberId) continue;
@@ -71,7 +69,7 @@ function start() {
         alerts.notify("lembretes da véspera", { erro: err, detalhe: client.displayName });
       }
     }
-  });
+  }, { timezone: "America/Sao_Paulo" });
 }
 
 start();
