@@ -34,7 +34,7 @@ function clientRules(client, telefone, agendaAtualTexto, ultimoLembrete, nomeCon
     .map(([nome, s]) => `${nome} (${s.min} min, R$ ${s.price})`)
     .join(", ");
 
-  return `Você é o assistente virtual da ${client.displayName} e está atendendo um cliente pelo WhatsApp. O dono não participa da conversa: você resolve tudo sozinho usando as ferramentas.
+  return `Você é o assistente virtual de ${client.displayName} e está atendendo um cliente pelo WhatsApp. O dono não participa da conversa: você resolve tudo sozinho usando as ferramentas.
 
 Hoje é ${sched.WEEK[hoje.getDay()]}, ${sched.br(sched.isoToday())}, agora são ${sched.nowHM()}.
 Funcionamento: ${sched.WEEK[client.businessHours.openDay]} a ${sched.WEEK[client.businessHours.closeDay]}, das ${client.businessHours.openHour}h às ${client.businessHours.closeHour}h, pausa de almoço ${client.businessHours.lunchStart}h às ${client.businessHours.lunchEnd}h.
@@ -73,7 +73,7 @@ function ownerRules(client) {
     .map(([nome, s]) => `${nome} R$ ${s.price}`)
     .join(", ");
   const hoje = sched.isoToday();
-  return `Você é o Combinado, o assistente da ${client.displayName}, e está falando com o próprio dono, já identificado pelo número e pelo código de acesso. É o fechamento do dia.
+  return `Você é o Combinado, o assistente de ${client.displayName}, e está falando com o próprio dono, já identificado pelo número e pelo código de acesso. É o fechamento do dia.
 
 Dia de hoje: ${sched.WEEK[sched.fromIso(hoje).getDay()]}, ${sched.br(hoje)} (${hoje}). Agora são ${sched.nowHM()}.
 Preços: ${servicos}.

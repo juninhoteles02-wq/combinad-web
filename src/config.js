@@ -13,7 +13,7 @@ require("dotenv").config();
 const CLIENTS = [
   {
     id: "elias",
-    displayName: process.env.ELIAS_DISPLAY_NAME || "Barbearia do Elias", // para trocar o nome sem mexer no código: ELIAS_DISPLAY_NAME no Render
+    displayName: process.env.ELIAS_DISPLAY_NAME || "Don Correia", // para trocar o nome sem mexer no código: ELIAS_DISPLAY_NAME no Render
     address: "Av. Henrique Duque Estrada Meyer, 540, Posse, Nova Iguaçu - RJ, 26030-380",
     phoneNumberId: process.env.ELIAS_PHONE_NUMBER_ID,
     calendarId: process.env.ELIAS_CALENDAR_ID,
