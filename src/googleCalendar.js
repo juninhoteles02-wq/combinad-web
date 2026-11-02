@@ -320,16 +320,16 @@ async function buscarCustos(calendarId) {
   const calendar = await getCalendarClient();
   const res = await calendar.events.list({ calendarId, privateExtendedProperty: ["tipo=custos_config"], maxResults: 1, showDeleted: false });
   const ev = (res.data.items || [])[0];
-  if (!ev) return { id: null, fixos: "", variaveis: "", financeiro: false };
+  if (!ev) return { id: null, fixos: "", variaveis: "", percentuais: "", meta: 0, financeiro: false };
   const p = (ev.extendedProperties && ev.extendedProperties.private) || {};
-  return { id: ev.id, fixos: p.fixos || "", variaveis: p.variaveis || "", financeiro: p.financeiro === "1" };
+  return { id: ev.id, fixos: p.fixos || "", variaveis: p.variaveis || "", percentuais: p.percentuais || "", meta: Number(p.meta || 0), financeiro: p.financeiro === "1" };
 }
 
-async function salvarCustos(calendarId, { fixos, variaveis, financeiro }) {
-  if (fixos.length > 1000 || variaveis.length > 1000) throw new Error("Lista de custos grande demais. Junte itens parecidos.");
+async function salvarCustos(calendarId, { fixos, variaveis, percentuais = "", meta = 0, financeiro }) {
+  if (fixos.length > 1000 || variaveis.length > 1000 || percentuais.length > 1000) throw new Error("Lista de custos grande demais. Junte itens parecidos.");
   const calendar = await getCalendarClient();
   const atual = await buscarCustos(calendarId);
-  const priv = { tipo: "custos_config", fixos, variaveis, financeiro: financeiro ? "1" : "0", atualizadoEm: new Date().toISOString() };
+  const priv = { tipo: "custos_config", fixos, variaveis, percentuais, meta: String(meta || 0), financeiro: financeiro ? "1" : "0", atualizadoEm: new Date().toISOString() };
   if (atual.id) {
     await calendar.events.patch({ calendarId, eventId: atual.id, requestBody: { extendedProperties: { private: priv } } });
     return;

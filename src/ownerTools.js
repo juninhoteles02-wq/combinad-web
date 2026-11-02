@@ -117,7 +117,7 @@ function buildOwnerTools(client) {
       async execute() {
         const c = await gcal.buscarCustos(client.calendarId);
         const fixos = fin.textoParaFixos(c.fixos);
-        return { custos_fixos: fixos, total_fixos_mensais: fin.totalFixos(fixos), custo_de_material_por_servico: fin.textoParaVariaveis(c.variaveis) };
+        return { custos_fixos: fixos, total_fixos_mensais: fin.totalFixos(fixos), custos_sobre_faturamento_pct: fin.textoParaFixos(c.percentuais), meta_de_lucro_mensal: c.meta, custo_de_material_por_servico: fin.textoParaVariaveis(c.variaveis) };
       },
     },
     {
@@ -128,6 +128,7 @@ function buildOwnerTools(client) {
         const c = await gcal.buscarCustos(client.calendarId);
         const fixos = fin.textoParaFixos(c.fixos);
         const variaveis = fin.textoParaVariaveis(c.variaveis);
+        const percentuais = fin.textoParaFixos(c.percentuais);
         if (fixos.length === 0) return { aviso: "Ainda não há custos fixos cadastrados. Peça ao dono a lista (aluguel, luz, água, internet, produtos, etc.) e peça para ele falar com a equipe do Combinado." };
 
         const hoje = sched.isoToday();
@@ -147,7 +148,7 @@ function buildOwnerTools(client) {
           (f.encaixes || []).forEach((e) => { porServico[e.servico] = (porServico[e.servico] || 0) + e.quantidade; });
         }
         const diasFechados = diasPassados.filter((d) => !naoFechados.includes(d)).length;
-        const r = fin.analisar({ fixos, variaveis, services: client.services, faturamento, atendimentosPorServico: porServico, diasAbertosDecorridos: diasPassados.length - naoFechados.length, diasAbertosNoMes: diasMes.length });
+        const r = fin.analisar({ fixos, variaveis, percentuais, meta: c.meta, services: client.services, faturamento, atendimentosPorServico: porServico, diasAbertosDecorridos: diasPassados.length - naoFechados.length, diasAbertosNoMes: diasMes.length });
         return { mes: `${String(m).padStart(2, "0")}/${y}`, dias_fechados: diasFechados, dias_com_agenda_ainda_nao_fechados: naoFechados, material_cadastrado_para: Object.keys(variaveis), ...r };
       },
     },

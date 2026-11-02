@@ -33,10 +33,10 @@ function mesclarFixos(atuais, novos, substituir) {
 function totalFixos(fixos) { return r2(fixos.reduce((t, f) => t + f.valor, 0)); }
 
 // services: { Corte: {price, min} }; variaveis: { Corte: custo de material por atendimento }
-function margemPorServico(services, variaveis, fixosPorAtendimento) {
+function margemPorServico(services, variaveis, fixosPorAtendimento, pct = 0) {
   return Object.entries(services).map(([nome, s]) => {
     const cv = variaveis[nome] || 0;
-    const margem = s.price - cv;
+    const margem = s.price - cv - s.price * pct;
     return {
       servico: nome, preco: s.price, custo_variavel: r2(cv), margem: r2(margem),
       margem_pct: s.price ? Math.round((margem / s.price) * 100) : 0,
@@ -50,15 +50,21 @@ function margemPorServico(services, variaveis, fixosPorAtendimento) {
 //   faturamento, atendimentosPorServico: {Corte: n},   (só dias já fechados)
 //   diasAbertosDecorridos, diasAbertosNoMes
 // }
+// percentuais: [{nome, valor}] em % do faturamento (taxa de maquininha, comissão etc.)
+function totalPercentual(percentuais) { return r2((percentuais || []).reduce((t, p) => t + p.valor, 0)); }
+
 function analisar(d) {
   const fixos = totalFixos(d.fixos);
   const atendidos = Object.values(d.atendimentosPorServico).reduce((t, n) => t + n, 0);
   const custoVar = r2(Object.entries(d.atendimentosPorServico).reduce((t, [s, n]) => t + n * (d.variaveis[s] || 0), 0));
+  const pct = totalPercentual(d.percentuais) / 100;
+  const meta = Number(d.meta) || 0;
+  const custoPct = r2(d.faturamento * pct);
   const frac = d.diasAbertosNoMes ? Math.min(1, d.diasAbertosDecorridos / d.diasAbertosNoMes) : 0;
   const fixosProporcionais = r2(fixos * frac);
-  const lucroAteAgora = r2(d.faturamento - custoVar - fixosProporcionais);
+  const lucroAteAgora = r2(d.faturamento - custoVar - custoPct - fixosProporcionais);
   const ticket = atendidos ? d.faturamento / atendidos : 0;
-  const margemMedia = atendidos ? (d.faturamento - custoVar) / atendidos : 0;
+  const margemMedia = atendidos ? (d.faturamento - custoVar - custoPct) / atendidos : 0;
   const equilibrioAtend = margemMedia > 0 ? Math.ceil(fixos / margemMedia) : null;
   const projecaoAtend = d.diasAbertosDecorridos ? Math.round((atendidos / d.diasAbertosDecorridos) * d.diasAbertosNoMes) : null;
   const fixoPorAtend = projecaoAtend ? fixos / projecaoAtend : null;
@@ -75,7 +81,14 @@ function analisar(d) {
     projecao_atendimentos_no_mes: projecaoAtend,
     projecao_lucro_no_mes: projecaoAtend !== null ? r2(projecaoAtend * margemMedia - fixos) : null,
     custo_fixo_por_atendimento_no_ritmo_atual: fixoPorAtend === null ? null : r2(fixoPorAtend),
-    margem_por_servico: margemPorServico(d.services, d.variaveis, fixoPorAtend),
+    custos_sobre_faturamento_pct: r2(pct * 100),
+    custos_sobre_faturamento_ate_agora: custoPct,
+    meta_de_lucro_mensal: meta,
+    atendimentos_para_bater_a_meta: meta > 0 && margemMedia > 0 ? Math.ceil((fixos + meta) / margemMedia) : null,
+    faturamento_para_bater_a_meta: meta > 0 && margemMedia > 0 ? r2(Math.ceil((fixos + meta) / margemMedia) * ticket) : null,
+    diferenca_projecao_para_meta: meta > 0 && projecaoAtend !== null ? r2(projecaoAtend * margemMedia - fixos - meta) : null,
+    custo_total_por_atendimento: fixoPorAtend === null || !atendidos ? null : r2(fixoPorAtend + custoVar / atendidos + custoPct / atendidos),
+    margem_por_servico: margemPorServico(d.services, d.variaveis, fixoPorAtend, pct),
   };
 }
 
@@ -88,7 +101,10 @@ function formParaCustos(body, services) {
   const fixos = mesclarFixos([], itens, true);
   const variaveis = {};
   Object.keys(services).forEach((s) => { const n = numero(body["mat_" + s]); if (n > 0) variaveis[s] = n; });
-  return { fixos, variaveis, financeiro: body.financeiro === "1" };
+  const pn = paraLista(body.pnome), pv = paraLista(body.pvalor);
+  const percentuais = mesclarFixos([], pn.map((n, i) => ({ nome: n, valor: numero(pv[i]) })).filter((x) => limparNome(x.nome) && x.valor > 0 && x.valor < 100), true);
+  const meta = numero(body.meta); 
+  return { fixos, variaveis, percentuais, meta: meta > 0 ? meta : 0, financeiro: body.financeiro === "1" };
 }
 
-module.exports = { formParaCustos, numero, analisar, margemPorServico, mesclarFixos, totalFixos, fixosParaTexto, textoParaFixos, variaveisParaTexto, textoParaVariaveis, limparNome };
+module.exports = { totalPercentual, formParaCustos, numero, analisar, margemPorServico, mesclarFixos, totalFixos, fixosParaTexto, textoParaFixos, variaveisParaTexto, textoParaVariaveis, limparNome };

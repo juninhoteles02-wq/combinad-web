@@ -40,4 +40,17 @@ assert.strictEqual(fo.financeiro, true);
 const um = f.formParaCustos({ nome: "Aluguel", valor: "800" }, services);
 assert.strictEqual(um.fixos.length, 1); assert.strictEqual(um.financeiro, false);
 assert.strictEqual(f.formParaCustos({}, services).fixos.length, 0);
+// MEI: imposto fixo, taxa de maquininha em %, meta de lucro
+const m = f.analisar({ fixos: [{ nome: "Aluguel", valor: 800 }, { nome: "DAS", valor: 80 }, { nome: "Luz", valor: 120 }], variaveis: {}, percentuais: [{ nome: "Maquininha", valor: 5 }], meta: 1500, services,
+  faturamento: 1000, atendimentosPorServico: { Corte: 40 }, diasAbertosDecorridos: 10, diasAbertosNoMes: 20 });
+assert.strictEqual(m.custos_sobre_faturamento_pct, 5);
+assert.strictEqual(m.custos_sobre_faturamento_ate_agora, 50);
+assert.strictEqual(m.lucro_estimado_ate_agora, 1000 - 50 - 500);            // 1000 - 5% - metade dos fixos
+assert.strictEqual(m.ponto_de_equilibrio_atendimentos_no_mes, Math.ceil(1000 / 23.75));  // margem por atend: 25 - 1,25
+assert.strictEqual(m.atendimentos_para_bater_a_meta, Math.ceil(2500 / 23.75));
+assert.strictEqual(m.faturamento_para_bater_a_meta, Math.ceil(2500 / 23.75) * 25);
+assert.strictEqual(m.diferenca_projecao_para_meta, Math.round((80 * 23.75 - 1000 - 1500) * 100) / 100);
+assert.strictEqual(f.analisar({ fixos: [{ nome: "A", valor: 100 }], variaveis: {}, services, faturamento: 0, atendimentosPorServico: {}, diasAbertosDecorridos: 0, diasAbertosNoMes: 20 }).atendimentos_para_bater_a_meta, null);
+const fm = f.formParaCustos({ nome: "DAS do MEI", valor: "80", pnome: ["Maquininha", ""], pvalor: ["3,5", "2"], meta: "1.500" }, services);
+assert.strictEqual(fm.percentuais.length, 1); assert.strictEqual(fm.percentuais[0].valor, 3.5); assert.strictEqual(fm.meta, 1500);
 console.log("financeiro-test OK");

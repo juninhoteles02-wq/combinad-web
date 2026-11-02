@@ -290,7 +290,7 @@ function chaveOk(chave) { return !!env.adminKey && chave === env.adminKey; }
 async function mostrarCadastro(res, chave, aviso) {
   const client = clienteAdmin();
   const c = await gcal.buscarCustos(client.calendarId);
-  res.send(paginaCadastro({ client, chave, fixos: fin.textoParaFixos(c.fixos), variaveis: fin.textoParaVariaveis(c.variaveis), financeiro: c.financeiro, aviso }));
+  res.send(paginaCadastro({ client, chave, fixos: fin.textoParaFixos(c.fixos), percentuais: fin.textoParaFixos(c.percentuais), meta: c.meta, variaveis: fin.textoParaVariaveis(c.variaveis), financeiro: c.financeiro, aviso }));
 }
 app.get("/admin/cadastro", async (req, res) => {
   if (!chaveOk(req.query.chave)) return res.sendStatus(404);
@@ -301,8 +301,8 @@ app.post("/admin/cadastro", async (req, res) => {
   try {
     const client = clienteAdmin();
     const dados = fin.formParaCustos(req.body, client.services);
-    await gcal.salvarCustos(client.calendarId, { fixos: fin.fixosParaTexto(dados.fixos), variaveis: fin.variaveisParaTexto(dados.variaveis), financeiro: dados.financeiro });
-    await mostrarCadastro(res, req.body.chave, `Salvo: ${dados.fixos.length} custos fixos, total R$ ${fin.totalFixos(dados.fixos)} por mês. Plano Premium ${dados.financeiro ? "ligado" : "desligado"}.`);
+    await gcal.salvarCustos(client.calendarId, { fixos: fin.fixosParaTexto(dados.fixos), variaveis: fin.variaveisParaTexto(dados.variaveis), percentuais: fin.fixosParaTexto(dados.percentuais), meta: dados.meta, financeiro: dados.financeiro });
+    await mostrarCadastro(res, req.body.chave, `Salvo: ${dados.fixos.length} custos fixos (R$ ${fin.totalFixos(dados.fixos)} por mês), ${dados.percentuais.length} custos em %, meta de lucro R$ ${dados.meta}. Plano Premium ${dados.financeiro ? "ligado" : "desligado"}.`);
   } catch (err) {
     alerts.notify("cadastro de custos", { erro: err });
     res.status(500).send("Não consegui salvar agora. Veja os logs do Render.");
