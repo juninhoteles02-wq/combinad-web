@@ -65,6 +65,9 @@ gcal.nomeConhecido = async () => null;
 gcal.salvarNomeCliente = async () => ({ ok: true });
 gcal.salvarFechamentoDia = async () => ({ ok: true });
 gcal.buscarFechamentoDia = async () => null;
+let custosSalvos = { id: null, fixos: "", variaveis: "" };
+gcal.buscarCustos = async () => custosSalvos;
+gcal.salvarCustos = async (cal, c) => { custosSalvos = { id: "C1", ...c }; };
 
 async function run() {
   const telefone = "5521988887777";
@@ -179,6 +182,24 @@ async function run() {
   evB.lembreteEm = "2026-01-01T00:00:00.000Z"; evA.situacao = "agendado"; evA.lembreteEm = "2026-02-01T00:00:00.000Z";
   assert.strictEqual(lembretePendente(null, [evB, evA]), evA.id);
   console.log("OK: com dois lembretes, vale o mais recente");
+
+  // ---- custos do dono ----
+  const semCustos = await ownerTools.find((t) => t.name === "analise_financeira").execute({});
+  assert(semCustos.aviso, "sem custos cadastrados deve avisar");
+  const def = await ownerTools.find((t) => t.name === "definir_custos").execute({
+    fixos: [{ nome: "Aluguel", valor: 800 }, { nome: "Luz", valor: 150 }],
+    material_por_servico: [{ servico: "Corte", valor: 3 }],
+  });
+  assert.strictEqual(def.total_fixos_mensais, 950);
+  const def2 = await ownerTools.find((t) => t.name === "definir_custos").execute({ fixos: [{ nome: "Luz", valor: 0 }, { nome: "Internet", valor: 100 }] });
+  assert.strictEqual(def2.total_fixos_mensais, 900);
+  assert.strictEqual(def2.custo_de_material_por_servico.Corte, 3, "material anterior preservado");
+  const ver = await ownerTools.find((t) => t.name === "ver_custos").execute({});
+  assert.strictEqual(ver.custos_fixos.length, 2);
+  const an = await ownerTools.find((t) => t.name === "analise_financeira").execute({});
+  assert.strictEqual(an.custos_fixos_mensais, 900);
+  assert(Array.isArray(an.margem_por_servico) && an.margem_por_servico.length === Object.keys(client.services).length);
+  console.log("OK: custos do dono cadastrados e analisados");
 
   console.log("\nTodos os testes de lógica passaram.");
 }

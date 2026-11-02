@@ -310,6 +310,42 @@ async function buscarFechamentoDia(calendarId, dateISO) {
   };
 }
 
+
+// ---------- custos do dono (lista fixa, permanente) ----------
+// Um evento oculto de dia inteiro (2020-01-03) com a lista de custos fixos
+// mensais e o custo de material por serviço.
+const CUSTOS_DATA = "2020-01-03";
+
+async function buscarCustos(calendarId) {
+  const calendar = await getCalendarClient();
+  const res = await calendar.events.list({ calendarId, privateExtendedProperty: ["tipo=custos_config"], maxResults: 1, showDeleted: false });
+  const ev = (res.data.items || [])[0];
+  if (!ev) return { id: null, fixos: "", variaveis: "" };
+  const p = (ev.extendedProperties && ev.extendedProperties.private) || {};
+  return { id: ev.id, fixos: p.fixos || "", variaveis: p.variaveis || "" };
+}
+
+async function salvarCustos(calendarId, { fixos, variaveis }) {
+  if (fixos.length > 1000 || variaveis.length > 1000) throw new Error("Lista de custos grande demais. Junte itens parecidos.");
+  const calendar = await getCalendarClient();
+  const atual = await buscarCustos(calendarId);
+  const priv = { tipo: "custos_config", fixos, variaveis, atualizadoEm: new Date().toISOString() };
+  if (atual.id) {
+    await calendar.events.patch({ calendarId, eventId: atual.id, requestBody: { extendedProperties: { private: priv } } });
+    return;
+  }
+  await calendar.events.insert({
+    calendarId,
+    requestBody: {
+      summary: "Custos do negócio (Combinado)",
+      description: "Registro interno do Combinado, não é um agendamento.",
+      start: { date: CUSTOS_DATA }, end: { date: "2020-01-04" },
+      transparency: "transparent", visibility: "private",
+      extendedProperties: { private: priv },
+    },
+  });
+}
+
 async function getEvent(calendarId, eventId) {
   const calendar = await getCalendarClient();
   const res = await calendar.events.get({ calendarId, eventId });
@@ -371,4 +407,6 @@ module.exports = {
   desempacotarHistorico,
   salvarFechamentoDia,
   buscarFechamentoDia,
+  buscarCustos,
+  salvarCustos,
 };
